@@ -34,6 +34,7 @@ from .api.schemas import (
 )
 from .core.config import get_settings
 from .core.modes import list_modes
+from .core.personas import get_persona, list_personas
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
 from .plugins.manager import get_connector_manager
@@ -80,6 +81,14 @@ async def get_modes():
             "max_steps": m.max_steps,
         }
         for m in list_modes()
+    ]
+
+
+@app.get("/api/personas")
+async def get_personas():
+    return [
+        {"id": p.id, "name": p.name, "tagline": p.tagline}
+        for p in list_personas()
     ]
 
 
@@ -200,7 +209,17 @@ async def chat_stream(payload: ChatRequest):
     provider_id = payload.provider or user_settings.get("provider") or settings.DEFAULT_PROVIDER
     model = payload.model or user_settings.get("model") or None
     api_key_override = user_settings.get("api_keys", {}).get(provider_id)
-    persona = payload.persona or user_settings.get("persona") or None
+
+    persona_text_parts = []
+    if payload.persona_id:
+        persona_obj = get_persona(payload.persona_id)
+        if persona_obj.system_suffix:
+            persona_text_parts.append(persona_obj.system_suffix)
+    if payload.persona:
+        persona_text_parts.append(payload.persona)
+    elif user_settings.get("persona"):
+        persona_text_parts.append(user_settings["persona"])
+    persona = "\n\n".join(persona_text_parts) or None
 
     history_rows = await store.get_messages(conversation_id, limit=40)
     history: list[ChatMessage] = []

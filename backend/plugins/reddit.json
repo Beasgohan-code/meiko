@@ -1,0 +1,43 @@
+{
+  "id": "reddit",
+  "name": "Reddit",
+  "description": "Search and read public Reddit posts/comments (free, keyless, uses Reddit's public JSON API).",
+  "base_url": "https://www.reddit.com",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "reddit_search",
+      "description": "Search Reddit posts across all subreddits by keyword.",
+      "method": "GET",
+      "path": "/search.json",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": { "type": "string", "description": "Search query" },
+          "sort": { "type": "string", "default": "relevance", "description": "relevance|hot|top|new|comments" },
+          "limit": { "type": "integer", "default": 5 }
+        },
+        "required": ["q"]
+      },
+      "query_params": ["q", "sort", "limit"]
+    },
+    {
+      "name": "reddit_subreddit_top",
+      "description": "Get top posts from a specific subreddit.",
+      "method": "GET",
+      "path": "/r/{subreddit}/top.json",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "subreddit": { "type": "string", "description": "Subreddit name without r/, e.g. 'technology'" },
+          "t": { "type": "string", "default": "day", "description": "Time range: hour|day|week|month|year|all" },
+          "limit": { "type": "integer", "default": 5 }
+        },
+        "required": ["subreddit"]
+      },
+      "path_params": ["subreddit"],
+      "query_params": ["t", "limit"]
+    }
+  ]
+}

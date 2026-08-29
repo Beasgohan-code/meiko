@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None
     mode: str = "autonomous"
     persona: Optional[str] = None
+    persona_id: Optional[str] = None
     image_paths: Optional[list[str]] = None
 
 

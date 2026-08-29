@@ -49,6 +49,10 @@ class Settings(BaseSettings):
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    CEREBRAS_API_KEY: Optional[str] = None
+    HUGGINGFACE_API_KEY: Optional[str] = None
+    MISTRAL_API_KEY: Optional[str] = None
+
     # --- Web search tool (optional keys, free fallback via DuckDuckGo works without keys) ---
     TAVILY_API_KEY: Optional[str] = None
 

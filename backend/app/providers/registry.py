@@ -88,6 +88,36 @@ PROVIDER_CATALOG: list[ProviderMeta] = [
         key_help_url="https://ollama.com/download",
         description="Run fully local/offline open-weight models on your own machine.",
     ),
+    ProviderMeta(
+        id="cerebras",
+        display_name="Cerebras",
+        default_base_url="https://api.cerebras.ai/v1",
+        default_model="llama-3.3-70b",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://cloud.cerebras.ai/",
+        description="Extremely fast free-tier inference for Llama models on Cerebras wafer-scale chips.",
+    ),
+    ProviderMeta(
+        id="huggingface",
+        display_name="Hugging Face Inference",
+        default_base_url="https://router.huggingface.co/v1",
+        default_model="meta-llama/Llama-3.3-70B-Instruct",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://huggingface.co/settings/tokens",
+        description="Free-tier serverless inference across many open-weight models via Hugging Face's router.",
+    ),
+    ProviderMeta(
+        id="mistral",
+        display_name="Mistral (La Plateforme)",
+        default_base_url="https://api.mistral.ai/v1",
+        default_model="mistral-small-latest",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://console.mistral.ai/api-keys",
+        description="Mistral's free experimental tier for their open-weight models.",
+    ),
 ]
 
 _CATALOG_BY_ID = {p.id: p for p in PROVIDER_CATALOG}
@@ -122,6 +152,9 @@ def build_provider(
         "groq": settings.GROQ_API_KEY,
         "openai": settings.OPENAI_API_KEY,
         "ollama": None,
+        "cerebras": getattr(settings, "CEREBRAS_API_KEY", None),
+        "huggingface": getattr(settings, "HUGGINGFACE_API_KEY", None),
+        "mistral": getattr(settings, "MISTRAL_API_KEY", None),
     }
     env_base_map = {
         "nvidia": settings.NVIDIA_BASE_URL,
@@ -130,6 +163,9 @@ def build_provider(
         "groq": settings.GROQ_BASE_URL,
         "openai": settings.OPENAI_BASE_URL,
         "ollama": settings.OLLAMA_BASE_URL.rstrip("/") + "/v1",
+        "cerebras": "https://api.cerebras.ai/v1",
+        "huggingface": "https://router.huggingface.co/v1",
+        "mistral": "https://api.mistral.ai/v1",
     }
 
     api_key = override_api_key or env_key_map.get(provider_id)

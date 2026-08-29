@@ -1,0 +1,41 @@
+{
+  "id": "hackernews",
+  "name": "Hacker News",
+  "description": "Read top/new stories and search Hacker News (free, keyless, via the official Firebase + Algolia APIs).",
+  "base_url": "https://hn.algolia.com/api/v1",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "hackernews_search",
+      "description": "Search Hacker News stories and comments by keyword.",
+      "method": "GET",
+      "path": "/search",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query" },
+          "tags": { "type": "string", "default": "story", "description": "e.g. story, comment, poll" },
+          "hitsPerPage": { "type": "integer", "default": 5 }
+        },
+        "required": ["query"]
+      },
+      "query_params": ["query", "tags", "hitsPerPage"]
+    },
+    {
+      "name": "hackernews_front_page",
+      "description": "Get the current Hacker News front page ranked by points.",
+      "method": "GET",
+      "path": "/search",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tags": { "type": "string", "default": "front_page" },
+          "hitsPerPage": { "type": "integer", "default": 10 }
+        },
+        "required": []
+      },
+      "query_params": ["tags", "hitsPerPage"]
+    }
+  ]
+}
