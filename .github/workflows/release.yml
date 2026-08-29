@@ -1,0 +1,64 @@
+name: Release Bundle
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch: {}
+
+jobs:
+  bundle:
+    name: Build & bundle Meiko release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build web app
+        working-directory: web
+        run: |
+          npm install
+          npm run build
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.3"
+          channel: "stable"
+          cache: true
+
+      - name: Build release APK
+        working-directory: mobile
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+          flutter build apk --release
+
+      - name: Assemble release bundle
+        run: |
+          mkdir -p dist_bundle
+          cp -r web/dist dist_bundle/web-app
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk dist_bundle/meiko.apk
+          cp -r backend dist_bundle/backend --parents 2>/dev/null || cp -r backend dist_bundle/
+          cp -r telegram-bot dist_bundle/
+          cp -r cli dist_bundle/
+          cp README.md dist_bundle/ 2>/dev/null || true
+          cd dist_bundle && zip -r ../meiko-release-bundle.zip . && cd ..
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: meiko-release-bundle
+          path: meiko-release-bundle.zip
+
+      - name: Attach bundle to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            meiko-release-bundle.zip
+            mobile/build/app/outputs/flutter-apk/app-release.apk

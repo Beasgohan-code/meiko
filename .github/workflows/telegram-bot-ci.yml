@@ -1,0 +1,48 @@
+name: Telegram Bot CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "telegram-bot/**"
+      - ".github/workflows/telegram-bot-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "telegram-bot/**"
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Lint & smoke test bot
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: telegram-bot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: telegram-bot/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check src --exit-zero
+
+      - name: Import smoke test (builds the Application without polling)
+        env:
+          TELEGRAM_BOT_TOKEN: "000000:dummy-token-for-ci-import-check"
+        run: python -c "from src.bot import build_application; app = build_application(); print('Meiko Telegram bot imported OK,', len(app.handlers[0]), 'handlers')"
+
+      - name: Build Docker image
+        run: docker build -t meiko-telegram-bot:ci .
