@@ -31,18 +31,34 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build release APK
+      - name: Build Flutter release APK
         working-directory: mobile
         run: |
           flutter pub get
           dart run flutter_launcher_icons
           flutter build apk --release
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build native Kotlin release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+
       - name: Assemble release bundle
         run: |
           mkdir -p dist_bundle
           cp -r web/dist dist_bundle/web-app
-          cp mobile/build/app/outputs/flutter-apk/app-release.apk dist_bundle/meiko.apk
+          cp mobile/build/app/outputs/flutter-apk/app-release.apk dist_bundle/meiko-flutter.apk
+          cp android/app/build/outputs/apk/release/app-release*.apk dist_bundle/meiko-native.apk
           cp -r backend dist_bundle/backend
           cp -r telegram-bot dist_bundle/telegram-bot
           cp -r cli dist_bundle/cli
@@ -62,3 +78,4 @@ jobs:
           files: |
             meiko-release-bundle.zip
             mobile/build/app/outputs/flutter-apk/app-release.apk
+            android/app/build/outputs/apk/release/app-release*.apk

@@ -42,6 +42,17 @@ mobile/.idea/
 *.keystore
 key.properties
 
+# --- Native Kotlin Android app ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/**/*.jks
+android/**/*.keystore
+android/.idea/
+android/**/*.iml
+
 # --- Telegram bot ---
 telegram-bot/node_modules/
 telegram-bot/dist/

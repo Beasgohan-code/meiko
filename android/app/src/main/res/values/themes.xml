@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Meiko" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#060613</item>
+        <item name="android:navigationBarColor">#060613</item>
+        <item name="android:windowBackground">#060613</item>
+    </style>
+</resources>

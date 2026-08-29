@@ -41,6 +41,12 @@ much like Claude's Connectors or a DeepSeek-style agent harness.
   micro-interactions, streaming chat with live plan checklists, tool traces, and citation chips
 - 📱 **Android/iOS app** — Flutter, same visual language, native animated orb, built automatically
   into an APK by GitHub Actions on every push
+- 🤖📱 **Native Kotlin Android app** — a second, from-scratch Android client (`android/`) written in
+  Kotlin + Jetpack Compose + Material 3, using Ktor for SSE streaming chat, Coil for image loading,
+  and Compose Navigation. Same feature set as the Flutter app (agent modes, provider/model picker,
+  persona + reply-language settings, persistent memory manager, conversation history/search, plan
+  tracker, tool traces, citations, provider-fallback notices, generated-image rendering) — built as
+  a fully independent module so it can evolve as a standalone native experience alongside Flutter
 - 🤖 **Telegram bot** — modern Bot API 7+ features: inline keyboards for modes/personas/providers/
   connectors, message reactions, `/stop` to cancel mid-generation, live streaming edits with plan +
   citation rendering, conversation history browser, `/github` for repo write access, `/usage` stats,
@@ -61,9 +67,11 @@ meiko/
 │   └── plugins/      JSON connector manifests (GitHub, Wikipedia, Reddit, Hacker News, Weather)
 ├── web/              React + Three.js + anime.js web app
 ├── mobile/           Flutter Android/iOS app
+├── android/          Native Kotlin + Jetpack Compose Android app (standalone, additive to mobile/)
 ├── telegram-bot/     python-telegram-bot client
 ├── cli/              Terminal client for the Meiko backend
-└── .github/workflows/  CI/CD: backend, web, telegram bot, Android APK build, full release bundler
+└── .github/workflows/  CI/CD: backend, web, telegram bot, Flutter APK build, native Kotlin APK
+    build, full release bundler
 ```
 
 ## 🚀 Quick start
@@ -131,15 +139,19 @@ python meiko_cli.py chat "hello Meiko!"
 ## 🤖 CI/CD
 
 Every push runs the relevant CI workflow (`backend-ci.yml`, `web-ci.yml`, `telegram-bot-ci.yml`).
-`android-build.yml` builds a debug + release APK on every push to `mobile/**` and uploads them as
-downloadable workflow artifacts — grab them from the **Actions** tab, or trigger a GitHub Release
-to get them attached automatically. `release.yml` bundles the entire built stack (web dist + APK +
-backend + bot + CLI source) into one zip for easy self-hosting.
+`android-build.yml` builds the **Flutter** debug + release APK on every push to `mobile/**`, while
+`android-native-build.yml` builds the **native Kotlin** debug + release APK on every push to
+`android/**` (via `android-actions/setup-android` + the Gradle wrapper — no local Android SDK is
+needed, everything compiles in CI). Both upload downloadable workflow artifacts — grab them from
+the **Actions** tab, or trigger a GitHub Release to get them attached automatically. `release.yml`
+bundles the entire built stack (web dist + both APKs + backend + bot + CLI source) into one zip for
+easy self-hosting.
 
 ### Optional: signed release APKs
 
 To get properly signed release APKs instead of debug-signed ones, add these repository secrets
-(Settings → Secrets and variables → Actions):
+(Settings → Secrets and variables → Actions) — they're used by **both** the Flutter and native
+Kotlin build workflows:
 
 - `ANDROID_KEYSTORE_BASE64` — your `.jks` keystore, base64-encoded (`base64 -w0 your.jks`)
 - `ANDROID_KEYSTORE_PASSWORD`
