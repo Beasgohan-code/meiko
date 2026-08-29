@@ -37,6 +37,9 @@ export default function App() {
     setError,
     setStreaming,
     resetConversation,
+    updatePlan,
+    setCitations,
+    addProviderNotice,
   } = useMeikoStore();
 
   const [modes, setModes] = useState<AgentModeMeta[]>([]);
@@ -110,11 +113,26 @@ export default function App() {
               updateToolResult(assistantId, event.id, event.result);
               setOrbState("thinking");
               break;
+            case "plan_update":
+              updatePlan(assistantId, event.tasks || []);
+              break;
+            case "citations":
+              setCitations(assistantId, event.sources || []);
+              break;
+            case "provider_switch":
+              addProviderNotice(
+                assistantId,
+                `Switched from ${event.from} to ${event.to} after an error — continuing automatically.`
+              );
+              break;
             case "final":
               finalText = event.text;
               break;
             case "error":
               setError(assistantId, event.message);
+              break;
+            case "conversation_created":
+              if (event.conversation_id && !conversationId) setConversationId(event.conversation_id);
               break;
             case "done":
               if (event.conversation_id && !conversationId) setConversationId(event.conversation_id);

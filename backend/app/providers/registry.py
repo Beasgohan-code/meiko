@@ -32,7 +32,7 @@ PROVIDER_CATALOG: list[ProviderMeta] = [
         id="nvidia",
         display_name="NVIDIA NIM",
         default_base_url="https://integrate.api.nvidia.com/v1",
-        default_model="meta/llama-3.3-70b-instruct",
+        default_model="mistralai/mistral-nemotron",
         requires_key=True,
         free_tier=True,
         key_help_url="https://build.nvidia.com/",
@@ -129,6 +129,27 @@ def get_provider_meta(provider_id: str) -> Optional[ProviderMeta]:
 
 def list_provider_meta() -> list[ProviderMeta]:
     return PROVIDER_CATALOG
+
+
+# Ordered fallback preference per primary provider: if the primary fails
+# (rate-limited, retired model, connection error), Meiko tries these next,
+# provided the user has a key configured for them (or they're keyless/local).
+_FALLBACK_CHAINS: dict[str, list[str]] = {
+    "nvidia": ["groq", "cerebras", "openrouter", "gemini", "huggingface", "mistral", "ollama"],
+    "gemini": ["groq", "nvidia", "openrouter", "cerebras", "ollama"],
+    "openrouter": ["groq", "nvidia", "cerebras", "gemini", "ollama"],
+    "groq": ["cerebras", "nvidia", "openrouter", "gemini", "ollama"],
+    "cerebras": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
+    "huggingface": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
+    "mistral": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
+    "openai": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
+    "ollama": [],  # local is already the last resort; no further fallback
+}
+
+
+def fallback_chain(provider_id: str) -> list[str]:
+    """Ordered list of alternate provider ids to try if `provider_id` fails."""
+    return [p for p in _FALLBACK_CHAINS.get(provider_id, []) if p != provider_id]
 
 
 def build_provider(

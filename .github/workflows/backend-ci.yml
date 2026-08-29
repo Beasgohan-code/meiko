@@ -33,14 +33,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff
+          pip install -r requirements-dev.txt
 
       - name: Lint with ruff
-        run: ruff check app --exit-zero
+        run: ruff check app tests --exit-zero
 
       - name: Import smoke test (app must build without a running server)
         run: python -c "from app.main import app; print('Meiko backend imported OK with', len(app.routes), 'routes')"
+
+      - name: Run pytest suite
+        run: python -m pytest -v
 
       - name: Build Docker image
         run: docker build -t meiko-backend:ci .

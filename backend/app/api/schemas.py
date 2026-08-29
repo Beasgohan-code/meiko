@@ -2,33 +2,39 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    user_id: str = "default"
+    user_id: str = Field(default="default", max_length=128)
     session_id: Optional[str] = None
     conversation_id: Optional[str] = None
-    message: str
+    message: str = Field(..., min_length=1, max_length=12000)
     provider: Optional[str] = None
     model: Optional[str] = None
     mode: str = "autonomous"
     persona: Optional[str] = None
     persona_id: Optional[str] = None
     image_paths: Optional[list[str]] = None
+    enable_fallback: bool = True
 
 
 class SettingsUpdateRequest(BaseModel):
-    user_id: str = "default"
+    user_id: str = Field(default="default", max_length=128)
     provider: Optional[str] = None
     model: Optional[str] = None
     persona: Optional[str] = None
     api_keys: Optional[dict[str, str]] = None
+    theme: Optional[str] = None
 
 
 class NewConversationRequest(BaseModel):
-    user_id: str = "default"
-    title: str = ""
+    user_id: str = Field(default="default", max_length=128)
+    title: str = Field(default="", max_length=200)
+
+
+class RenameConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
 
 
 class ConnectorManifestRequest(BaseModel):
@@ -37,3 +43,8 @@ class ConnectorManifestRequest(BaseModel):
 
 class ConnectorToggleRequest(BaseModel):
     enabled: bool
+
+
+class ConnectorSecretRequest(BaseModel):
+    user_id: str = Field(default="default", max_length=128)
+    secret: str

@@ -9,6 +9,16 @@ export interface ToolTrace {
   status: "calling" | "done";
 }
 
+export interface PlanTask {
+  text: string;
+  status: "pending" | "in_progress" | "done";
+}
+
+export interface Citation {
+  url: string;
+  via: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -16,6 +26,9 @@ export interface ChatMessage {
   tools: ToolTrace[];
   streaming?: boolean;
   error?: string;
+  plan?: PlanTask[];
+  citations?: Citation[];
+  providerNotices?: string[];
 }
 
 interface MeikoState {
@@ -41,6 +54,10 @@ interface MeikoState {
   setError: (id: string, error: string) => void;
   setStreaming: (v: boolean) => void;
   resetConversation: () => void;
+  updatePlan: (assistantId: string, tasks: PlanTask[]) => void;
+  setCitations: (assistantId: string, citations: Citation[]) => void;
+  addProviderNotice: (assistantId: string, notice: string) => void;
+  loadMessages: (conversationId: string, rows: { role: string; content: string }[]) => void;
 }
 
 export const useMeikoStore = create<MeikoState>((set, get) => ({
@@ -118,4 +135,35 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
   setStreaming: (v) => set({ isStreaming: v }),
 
   resetConversation: () => set({ messages: [], conversationId: undefined, sessionId: uuidv4() }),
+
+  updatePlan: (assistantId, tasks) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === assistantId ? { ...m, plan: tasks } : m)),
+    })),
+
+  setCitations: (assistantId, citations) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === assistantId ? { ...m, citations } : m)),
+    })),
+
+  addProviderNotice: (assistantId, notice) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === assistantId ? { ...m, providerNotices: [...(m.providerNotices || []), notice] } : m
+      ),
+    })),
+
+  loadMessages: (conversationId, rows) =>
+    set({
+      conversationId,
+      sessionId: conversationId,
+      messages: rows
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .map((r) => ({
+          id: uuidv4(),
+          role: r.role as "user" | "assistant",
+          content: r.content,
+          tools: [],
+        })),
+    }),
 }));

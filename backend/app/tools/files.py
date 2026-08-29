@@ -5,7 +5,6 @@ edit them, inspect a small project) without touching the host filesystem.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 

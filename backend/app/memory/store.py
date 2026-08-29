@@ -22,8 +22,22 @@ CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     title TEXT DEFAULT '',
+    pinned INTEGER DEFAULT 0,
+    mode TEXT DEFAULT 'autonomous',
     created_at REAL,
     updated_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    provider TEXT,
+    mode TEXT,
+    tool_calls INTEGER DEFAULT 0,
+    steps INTEGER DEFAULT 0,
+    elapsed_seconds REAL DEFAULT 0,
+    error INTEGER DEFAULT 0,
+    created_at REAL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -63,6 +77,20 @@ class Store:
         async with aiosqlite.connect(self.db_path) as db:
             await db.executescript(SCHEMA)
             await db.commit()
+            await self._migrate(db)
+
+    async def _migrate(self, db: aiosqlite.Connection) -> None:
+        """Best-effort additive migrations for columns introduced after v1."""
+        migrations = [
+            ("conversations", "pinned", "INTEGER DEFAULT 0"),
+            ("conversations", "mode", "TEXT DEFAULT 'autonomous'"),
+        ]
+        for table, column, coltype in migrations:
+            try:
+                await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+                await db.commit()
+            except Exception:
+                pass  # column already exists
 
     # ---------- Conversations ----------
     async def create_conversation(self, user_id: str, title: str = "") -> str:
@@ -92,6 +120,84 @@ class Store:
             else:
                 await db.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (time.time(), conv_id))
             await db.commit()
+
+    async def rename_conversation(self, conv_id: str, title: str) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE conversations SET title = ? WHERE id = ?", (title, conv_id))
+            await db.commit()
+
+    async def delete_conversation(self, conv_id: str) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
+            await db.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            await db.commit()
+
+    async def search_conversations(self, user_id: str, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Search conversations by title, or by message content within them."""
+        like = f"%{query}%"
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                """
+                SELECT DISTINCT c.* FROM conversations c
+                LEFT JOIN messages m ON m.conversation_id = c.id
+                WHERE c.user_id = ? AND (c.title LIKE ? OR m.content LIKE ?)
+                ORDER BY c.updated_at DESC
+                LIMIT ?
+                """,
+                (user_id, like, like, limit),
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_conversation(self, conv_id: str) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM conversations WHERE id = ?", (conv_id,))
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def set_pinned(self, conv_id: str, pinned: bool) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE conversations SET pinned = ? WHERE id = ?", (1 if pinned else 0, conv_id))
+            await db.commit()
+
+    async def log_usage(
+        self,
+        user_id: str,
+        provider: str,
+        mode: str,
+        tool_calls: int = 0,
+        steps: int = 0,
+        elapsed_seconds: float = 0.0,
+        error: bool = False,
+    ) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "INSERT INTO usage_events (id, user_id, provider, mode, tool_calls, steps, elapsed_seconds, error, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), user_id, provider, mode, tool_calls, steps, elapsed_seconds, 1 if error else 0, time.time()),
+            )
+            await db.commit()
+
+    async def get_usage_summary(self, user_id: str, days: int = 30) -> dict[str, Any]:
+        since = time.time() - days * 86400
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT provider, mode, COUNT(*) as n, SUM(tool_calls) as tool_calls, "
+                "SUM(elapsed_seconds) as elapsed, SUM(error) as errors "
+                "FROM usage_events WHERE user_id = ? AND created_at >= ? GROUP BY provider, mode",
+                (user_id, since),
+            )
+            rows = [dict(r) for r in await cur.fetchall()]
+            cur2 = await db.execute(
+                "SELECT COUNT(*) as total, SUM(tool_calls) as tool_calls, SUM(error) as errors "
+                "FROM usage_events WHERE user_id = ? AND created_at >= ?",
+                (user_id, since),
+            )
+            totals = dict(await cur2.fetchone())
+            return {"by_provider_mode": rows, "totals": totals, "window_days": days}
 
     # ---------- Messages ----------
     async def add_message(self, conversation_id: str, role: str, content: str, tool_calls: Optional[list] = None) -> str:

@@ -8,7 +8,7 @@ allowed, extra system-prompt guidance, and default temperature.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -40,7 +40,7 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Research",
         description="Deep web research mode: searches, reads sources, and synthesizes a cited answer.",
         icon="search",
-        tools={"web_search", "fetch_url", "calculator", "remember", "recall_memories"},
+        tools={"web_search", "fetch_url", "calculator", "remember", "recall_memories", "update_plan"},
         max_steps=10,
         temperature=0.4,
         system_suffix=(
@@ -54,7 +54,7 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Code",
         description="Software engineering mode: writes, runs, and debugs code in a sandboxed workspace.",
         icon="code",
-        tools={"write_file", "read_file", "list_files", "run_python", "calculator", "web_search", "fetch_url", "make_zip", "remember", "recall_memories"},
+        tools={"write_file", "read_file", "list_files", "run_python", "calculator", "web_search", "fetch_url", "make_zip", "remember", "recall_memories", "update_plan"},
         max_steps=14,
         temperature=0.2,
         system_suffix=(
@@ -85,7 +85,7 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Creative",
         description="Image generation & creative writing mode.",
         icon="image",
-        tools={"generate_image", "make_document", "remember", "recall_memories"},
+        tools={"generate_image", "make_document", "remember", "recall_memories", "update_plan"},
         max_steps=6,
         temperature=0.95,
         system_suffix=(

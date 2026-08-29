@@ -5,13 +5,27 @@
  */
 
 export type AgentEventType =
+  | "conversation_created"
   | "step"
   | "token"
   | "tool_call"
   | "tool_result"
+  | "plan_update"
+  | "citations"
+  | "provider_switch"
   | "final"
   | "error"
   | "done";
+
+export interface PlanTask {
+  text: string;
+  status: "pending" | "in_progress" | "done";
+}
+
+export interface Citation {
+  url: string;
+  via: string;
+}
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -128,6 +142,43 @@ export async function getConversationMessages(conversationId: string) {
   return res.json();
 }
 
+export async function renameConversation(conversationId: string, title: string) {
+  const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify({ title }),
+  });
+  return res.json();
+}
+
+export async function deleteConversation(conversationId: string) {
+  const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  return res.json();
+}
+
+export async function pinConversation(conversationId: string, pinned: boolean) {
+  const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/pin?pinned=${pinned}`, {
+    method: "POST",
+    headers: headers(),
+  });
+  return res.json();
+}
+
+export async function searchConversations(userId: string, query: string) {
+  const res = await fetch(
+    `${BASE_URL}/api/conversations/search?user_id=${encodeURIComponent(userId)}&q=${encodeURIComponent(query)}`
+  );
+  return res.json();
+}
+
+export async function getUsageSummary(userId: string, days = 30) {
+  const res = await fetch(`${BASE_URL}/api/usage?user_id=${encodeURIComponent(userId)}&days=${days}`);
+  return res.json();
+}
+
 export async function uploadFile(sessionId: string, file: File) {
   const form = new FormData();
   form.append("file", file);
@@ -152,6 +203,7 @@ export interface ChatStreamParams {
   model?: string;
   personaId?: string;
   imagePaths?: string[];
+  enableFallback?: boolean;
 }
 
 /**
@@ -178,6 +230,7 @@ export async function streamChat(
       model: params.model,
       persona_id: params.personaId,
       image_paths: params.imagePaths,
+      enable_fallback: params.enableFallback ?? true,
     }),
   });
 

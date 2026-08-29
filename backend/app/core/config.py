@@ -26,10 +26,17 @@ class Settings(BaseSettings):
     # --- Auth ---
     MEIKO_API_KEY: Optional[str] = None  # if set, clients must send X-API-Key to hit /api
 
+    # --- Rate limiting (in-memory, per-process) ---
+    RATE_LIMIT_CHAT_PER_MIN: int = 20
+    RATE_LIMIT_GENERAL_PER_MIN: int = 120
+
+    # --- Logging ---
+    LOG_LEVEL: str = "INFO"
+
     # --- Default LLM provider selection ---
     # one of: nvidia, gemini, openrouter, groq, ollama, openai
     DEFAULT_PROVIDER: str = "nvidia"
-    DEFAULT_MODEL: str = "meta/llama-3.3-70b-instruct"
+    DEFAULT_MODEL: str = "mistralai/mistral-nemotron"
 
     # --- Provider API keys (all optional; user can also set these live in Settings UI) ---
     NVIDIA_API_KEY: Optional[str] = None
@@ -64,7 +71,7 @@ class Settings(BaseSettings):
     DB_PATH: str = "./data/meiko.db"
 
     # --- Agent behaviour ---
-    MAX_AGENT_STEPS: int = 8
+    MAX_AGENT_STEPS: int = 20  # hard safety ceiling; individual modes can request fewer
     MAX_TOKENS: int = 4096
     TEMPERATURE: float = 0.7
 

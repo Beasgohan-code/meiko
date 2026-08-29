@@ -1,7 +1,29 @@
-import { useEffect, useRef } from "react";
-import { MessageCircle, Search, Code2, Cpu, Image as ImageIcon, Settings, Plus, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  MessageCircle,
+  Search,
+  Code2,
+  Cpu,
+  Image as ImageIcon,
+  Settings,
+  Plus,
+  Sparkles,
+  Pin,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+} from "lucide-react";
 import { animatePanelIn, animateStagger } from "../lib/animations";
 import type { AgentModeMeta, PersonaMeta } from "../lib/api";
+import {
+  deleteConversation,
+  getConversationMessages,
+  listConversations,
+  pinConversation,
+  renameConversation,
+  searchConversations,
+} from "../lib/api";
 import { useMeikoStore } from "../lib/store";
 
 const MODE_ICONS: Record<string, any> = {
@@ -12,6 +34,13 @@ const MODE_ICONS: Record<string, any> = {
   image: ImageIcon,
 };
 
+interface ConversationSummary {
+  id: string;
+  title: string;
+  pinned?: number;
+  updated_at: number;
+}
+
 interface SidebarProps {
   modes: AgentModeMeta[];
   personas: PersonaMeta[];
@@ -21,9 +50,14 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, isOpen }: SidebarProps) {
-  const { mode, setMode, personaId, setPersona } = useMeikoStore();
+  const { userId, conversationId, mode, setMode, personaId, setPersona, loadMessages } = useMeikoStore();
   const ref = useRef<HTMLDivElement>(null);
   const modeListRef = useRef<HTMLDivElement>(null);
+
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [query, setQuery] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   useEffect(() => {
     if (ref.current) animatePanelIn(ref.current, -24);
@@ -32,6 +66,60 @@ export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, is
   useEffect(() => {
     if (modeListRef.current) animateStagger(modeListRef.current.children, 50);
   }, [modes]);
+
+  const refresh = async () => {
+    try {
+      const data = query.trim() ? await searchConversations(userId, query.trim()) : await listConversations(userId);
+      setConversations(data);
+    } catch {
+      // backend may be offline in preview; fail silently
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, conversationId]);
+
+  useEffect(() => {
+    const t = setTimeout(refresh, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const openConversation = async (id: string) => {
+    try {
+      const rows = await getConversationMessages(id);
+      loadMessages(id, rows);
+    } catch {
+      // ignore
+    }
+  };
+
+  const startRename = (c: ConversationSummary) => {
+    setEditingId(c.id);
+    setEditTitle(c.title || "Untitled");
+  };
+
+  const commitRename = async (id: string) => {
+    const title = editTitle.trim();
+    if (title) await renameConversation(id, title);
+    setEditingId(null);
+    refresh();
+  };
+
+  const togglePin = async (c: ConversationSummary) => {
+    await pinConversation(c.id, !c.pinned);
+    refresh();
+  };
+
+  const removeConversation = async (id: string) => {
+    await deleteConversation(id);
+    if (id === conversationId) onNewChat();
+    refresh();
+  };
+
+  const sorted = [...conversations].sort((a, b) => (b.pinned || 0) - (a.pinned || 0) || b.updated_at - a.updated_at);
 
   return (
     <aside className={`sidebar ${isOpen ? "open" : ""}`} ref={ref}>
@@ -78,6 +166,59 @@ export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, is
               <span className="desc">{p.tagline}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="history-section">
+        <div className="section-label">History</div>
+        <div className="history-search">
+          <Search size={13} />
+          <input
+            placeholder="Search conversations…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="history-list">
+          {sorted.map((c) => (
+            <div key={c.id} className={`history-item ${conversationId === c.id ? "active" : ""}`}>
+              {editingId === c.id ? (
+                <div className="history-edit-row">
+                  <input
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && commitRename(c.id)}
+                  />
+                  <button onClick={() => commitRename(c.id)} title="Save">
+                    <Check size={13} />
+                  </button>
+                  <button onClick={() => setEditingId(null)} title="Cancel">
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button className="history-title" onClick={() => openConversation(c.id)} title={c.title}>
+                    {c.pinned ? <Pin size={11} className="pin-icon" /> : null}
+                    <span>{c.title || "Untitled"}</span>
+                  </button>
+                  <div className="history-actions">
+                    <button onClick={() => togglePin(c)} title={c.pinned ? "Unpin" : "Pin"}>
+                      <Pin size={12} />
+                    </button>
+                    <button onClick={() => startRename(c)} title="Rename">
+                      <Pencil size={12} />
+                    </button>
+                    <button onClick={() => removeConversation(c.id)} title="Delete">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {sorted.length === 0 && <div className="history-empty">No conversations yet</div>}
         </div>
       </div>
 
