@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -23,7 +25,7 @@ android {
         create("release") {
             val keystorePropsFile = rootProject.file("keystore.properties")
             if (keystorePropsFile.exists()) {
-                val props = java.util.Properties()
+                val props = Properties()
                 props.load(keystorePropsFile.inputStream())
                 storeFile = file(props["storeFile"] as String)
                 storePassword = props["storePassword"] as String
