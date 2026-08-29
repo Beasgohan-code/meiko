@@ -25,6 +25,8 @@ async def stream_chat(
     session_id: str | None = None,
     persona_id: str | None = None,
     provider: str | None = None,
+    model: str | None = None,
+    ui_language: str | None = None,
 ) -> AsyncIterator[dict]:
     payload = {
         "user_id": user_id,
@@ -34,6 +36,8 @@ async def stream_chat(
         "session_id": session_id,
         "persona_id": persona_id,
         "provider": provider,
+        "model": model,
+        "ui_language": ui_language,
     }
 
     async with httpx.AsyncClient(timeout=180) as client:
@@ -67,6 +71,12 @@ async def fetch_personas() -> list[dict]:
 async def fetch_providers() -> list[dict]:
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.get(f"{config.MEIKO_BACKEND_URL}/api/providers")
+        return resp.json()
+
+
+async def fetch_models(provider: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(f"{config.MEIKO_BACKEND_URL}/api/models", params={"provider": provider})
         return resp.json()
 
 
@@ -138,6 +148,18 @@ async def rename_conversation(conversation_id: str, title: str) -> dict:
         resp = await client.patch(
             f"{config.MEIKO_BACKEND_URL}/api/conversations/{conversation_id}", headers=_headers(), json={"title": title}
         )
+        return resp.json()
+
+
+async def get_memories(user_id: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(f"{config.MEIKO_BACKEND_URL}/api/memories", params={"user_id": user_id}, headers=_headers())
+        return resp.json()
+
+
+async def clear_memories(user_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.delete(f"{config.MEIKO_BACKEND_URL}/api/memories", params={"user_id": user_id}, headers=_headers())
         return resp.json()
 
 

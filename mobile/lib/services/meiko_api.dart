@@ -99,6 +99,7 @@ class MeikoApi {
     String? model,
     String? persona,
     Map<String, String>? apiKeys,
+    String? uiLanguage,
   }) async {
     await http.post(
       _u('/api/settings'),
@@ -109,8 +110,29 @@ class MeikoApi {
         if (model != null) 'model': model,
         if (persona != null) 'persona': persona,
         if (apiKeys != null) 'api_keys': apiKeys,
+        if (uiLanguage != null) 'ui_language': uiLanguage,
       }),
     );
+  }
+
+  Future<List<ModelMeta>> fetchModels(String provider) async {
+    final res = await http.get(_u('/api/models?provider=$provider'));
+    final list = jsonDecode(res.body) as List;
+    return list.map((e) => ModelMeta.fromJson(e)).toList();
+  }
+
+  Future<List<MemoryFact>> fetchMemories(String userId) async {
+    final res = await http.get(_u('/api/memories?user_id=$userId'), headers: _headers);
+    final list = jsonDecode(res.body) as List;
+    return list.map((e) => MemoryFact.fromJson(e)).toList();
+  }
+
+  Future<void> deleteMemory(String memoryId) async {
+    await http.delete(_u('/api/memories/$memoryId'), headers: _headers);
+  }
+
+  Future<void> clearMemories(String userId) async {
+    await http.delete(_u('/api/memories?user_id=$userId'), headers: _headers);
   }
 
   Future<Map<String, dynamic>> uploadFile(String sessionId, String filename, List<int> bytes, String mime) async {

@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { X, Github, Sparkles } from "lucide-react";
+import { X, Github, Sparkles, Brain, Trash2 } from "lucide-react";
 import {
   ConnectorMeta,
+  MemoryFact,
+  ModelMeta,
   ProviderMeta,
   SkillMeta,
+  clearMemories,
+  deleteMemory,
   fetchConnectors,
+  fetchMemories,
+  fetchModels,
   fetchProviders,
   fetchSkills,
   getUserSettings,
@@ -12,19 +18,33 @@ import {
   updateUserSettings,
 } from "../lib/api";
 import { useMeikoStore } from "../lib/store";
+import { useI18n, SUPPORTED_LANGUAGES } from "../lib/i18n";
 
 interface Props {
   onClose: () => void;
 }
 
+const MODEL_TAG_LABEL: Record<string, string> = {
+  flagship: "🏆 Flagship",
+  fast: "⚡ Fast",
+  coding: "💻 Coding",
+  vision: "👁 Vision",
+  default: "⭐ Default",
+};
+
 export default function SettingsModal({ onClose }: Props) {
-  const { userId, provider, setProvider } = useMeikoStore();
-  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "persona">("providers");
+  const { userId, provider, model, setProvider } = useMeikoStore();
+  const { t } = useI18n();
+  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "memory" | "persona">("providers");
   const [providers, setProviders] = useState<ProviderMeta[]>([]);
+  const [models, setModels] = useState<ModelMeta[]>([]);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [skills, setSkills] = useState<SkillMeta[]>([]);
+  const [memories, setMemories] = useState<MemoryFact[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [activeProvider, setActiveProvider] = useState(provider || "nvidia");
+  const [activeModel, setActiveModel] = useState(model || "");
+  const [replyLanguage, setReplyLanguage] = useState("en");
   const [customPersona, setCustomPersona] = useState("");
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [githubStatus, setGithubStatus] = useState<string>("");
@@ -33,11 +53,28 @@ export default function SettingsModal({ onClose }: Props) {
     fetchProviders().then(setProviders);
     fetchConnectors().then(setConnectors);
     fetchSkills().then(setSkills);
+    fetchMemories(userId).then(setMemories).catch(() => {});
     getUserSettings(userId).then((s) => {
       if (s.provider) setActiveProvider(s.provider);
+      if (s.model) setActiveModel(s.model);
       if (s.persona) setCustomPersona(s.persona);
+      if (s.ui_language) setReplyLanguage(s.ui_language);
     });
   }, [userId]);
+
+  useEffect(() => {
+    fetchModels(activeProvider).then(setModels);
+  }, [activeProvider]);
+
+  const handleDeleteMemory = async (id: string) => {
+    await deleteMemory(id);
+    setMemories((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const handleClearMemories = async () => {
+    await clearMemories(userId);
+    setMemories([]);
+  };
 
   const saveKey = async (providerId: string, key: string) => {
     setKeys((prev) => ({ ...prev, [providerId]: key }));
@@ -48,10 +85,12 @@ export default function SettingsModal({ onClose }: Props) {
     await updateUserSettings({
       user_id: userId,
       provider: activeProvider,
+      model: activeModel || undefined,
       persona: customPersona,
       api_keys: keys,
+      ui_language: replyLanguage,
     });
-    setProvider(activeProvider);
+    setProvider(activeProvider, activeModel || undefined);
     setSaveStatus("Saved ✓");
     setTimeout(() => setSaveStatus(""), 1500);
   };
@@ -89,10 +128,13 @@ export default function SettingsModal({ onClose }: Props) {
             Connectors
           </button>
           <button className={`tab-btn ${tab === "skills" ? "active" : ""}`} onClick={() => setTab("skills")}>
-            Skills
+            {t("skills")}
+          </button>
+          <button className={`tab-btn ${tab === "memory" ? "active" : ""}`} onClick={() => setTab("memory")}>
+            {t("memory")}
           </button>
           <button className={`tab-btn ${tab === "persona" ? "active" : ""}`} onClick={() => setTab("persona")}>
-            Persona
+            {t("persona")}
           </button>
         </div>
 
@@ -132,7 +174,54 @@ export default function SettingsModal({ onClose }: Props) {
                 </div>
               </div>
             ))}
-            <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 6 }} onClick={persistSettings}>
+
+            <div className="provider-card" style={{ marginTop: 10 }}>
+              <div className="row">
+                <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Brain size={16} /> {t("pickModel")} — {activeProvider}
+                </span>
+              </div>
+              <div className="desc">
+                NVIDIA alone offers 20+ free curated models (DeepSeek, Kimi, GLM, Qwen, Llama, Mistral, Nemotron…).
+                Pick one that fits your task, or leave the default for a balanced general-purpose choice.
+              </div>
+              <div className="model-grid">
+                {models.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`model-card ${activeModel === m.id ? "active" : ""}`}
+                    onClick={() => setActiveModel(m.id)}
+                    title={m.id}
+                  >
+                    <div className="model-card-name">{m.display_name}</div>
+                    <div className="model-card-meta">
+                      {m.tag && <span className="model-badge">{MODEL_TAG_LABEL[m.tag] || m.tag}</span>}
+                      {m.reasoning && <span className="model-badge">🧠 {t("reasoning")}</span>}
+                      {m.vision && <span className="model-badge">👁 {t("vision")}</span>}
+                      {m.context_window && <span className="model-badge">{m.context_window} ctx</span>}
+                    </div>
+                    {m.good_for?.length > 0 && <div className="model-card-good-for">{m.good_for.join(" · ")}</div>}
+                  </button>
+                ))}
+                {models.length === 0 && <div className="field-hint">Loading models…</div>}
+              </div>
+            </div>
+
+            <div className="provider-card" style={{ marginTop: 10 }}>
+              <div className="row">
+                <span className="name">{t("replyLanguage")}</span>
+              </div>
+              <div className="desc">{t("replyLanguageHelp")}</div>
+              <select value={replyLanguage} onChange={(e) => setReplyLanguage(e.target.value)} className="lang-select">
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.flag} {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 12 }} onClick={persistSettings}>
               {saveStatus || "Save provider settings"}
             </button>
           </div>
@@ -205,6 +294,31 @@ export default function SettingsModal({ onClose }: Props) {
               </div>
             ))}
             {skills.length === 0 && <div className="field-hint">No skills installed yet.</div>}
+          </div>
+        )}
+
+        {tab === "memory" && (
+          <div>
+            <p className="field-hint" style={{ marginBottom: 10 }}>
+              Meiko saves durable facts about you across sessions (preferences, ongoing projects, etc.) using the
+              <code> remember</code> tool. Review or clear what it knows here.
+            </p>
+            {memories.length === 0 && <div className="field-hint">{t("noMemories")}</div>}
+            {memories.map((m) => (
+              <div className="connector-row" key={m.id}>
+                <div className="meta">
+                  <span className="desc">{m.fact}</span>
+                </div>
+                <button className="icon-btn" title={t("delete")} onClick={() => handleDeleteMemory(m.id)}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+            {memories.length > 0 && (
+              <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 10 }} onClick={handleClearMemories}>
+                {t("clearAll")}
+              </button>
+            )}
           </div>
         )}
 

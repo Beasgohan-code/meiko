@@ -43,13 +43,17 @@ from telegram.ext import (
 
 from . import config
 from .meiko_client import (
+    clear_memories,
     delete_conversation,
+    download_url,
     fetch_connectors,
+    fetch_models,
     fetch_modes,
     fetch_personas,
     fetch_providers,
     fetch_skills,
     get_conversation_messages,
+    get_memories,
     get_usage,
     list_conversations,
     rename_conversation,
@@ -77,7 +81,16 @@ def _chat_state(context: ContextTypes.DEFAULT_TYPE) -> dict:
     context.user_data.setdefault("conversation_id", None)
     context.user_data.setdefault("session_id", str(uuid.uuid4()))
     context.user_data.setdefault("provider", None)
+    context.user_data.setdefault("model", None)
+    context.user_data.setdefault("ui_language", None)
     return context.user_data
+
+
+LANGUAGE_CHOICES = [
+    ("en", "🇬🇧 English"), ("es", "🇪🇸 Español"), ("fr", "🇫🇷 Français"), ("de", "🇩🇪 Deutsch"),
+    ("hi", "🇮🇳 हिन्दी"), ("pt", "🇵🇹 Português"), ("ar", "🇸🇦 العربية"), ("ja", "🇯🇵 日本語"),
+    ("zh", "🇨🇳 中文"), ("ru", "🇷🇺 Русский"), ("ko", "🇰🇷 한국어"), ("id", "🇮🇩 Bahasa Indonesia"),
+]
 
 
 def _user_id(update: Update) -> str:
@@ -109,11 +122,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ],
         [
             InlineKeyboardButton("🔑 Providers", callback_data="menu:providers"),
-            InlineKeyboardButton("🧩 Connectors", callback_data="menu:connectors"),
+            InlineKeyboardButton("🧬 Model", callback_data="menu:model"),
         ],
         [
+            InlineKeyboardButton("🧩 Connectors", callback_data="menu:connectors"),
             InlineKeyboardButton("🧠 Skills", callback_data="menu:skills"),
+        ],
+        [
             InlineKeyboardButton("🗂 History", callback_data="menu:history"),
+            InlineKeyboardButton("🌐 Language", callback_data="menu:lang"),
         ],
     ]
     if config.WEBAPP_URL:
@@ -121,14 +138,26 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await update.message.reply_text(
         "👋 *Hey, I'm Meiko!*\n\n"
-        "Your open, pluggable autonomous AI agent — I can research the web, write & run code and shell "
-        "commands, generate images, remember things about you, use Skills for specialized playbooks, and "
-        "connect to GitHub (read *and* write), Wikipedia, Reddit, Hacker News, and weather.\n\n"
+        "Your open, pluggable autonomous AI agent — pick from 20+ free NVIDIA models (DeepSeek, Kimi, GLM, "
+        "Qwen, Llama and more), plus Gemini/Groq/OpenRouter. I can research the web, write & run code and shell "
+        "commands, generate images, remember things about you long-term, use Skills for specialized playbooks, "
+        "and connect to GitHub (read *and* write), Wikipedia, Reddit, Hacker News, and weather.\n\n"
         "Just send me a message to get started, or use the menu below.\n\n"
-        "*Commands:* /mode /persona /providers /connectors /skills /github /history /rename /usage /new /stop /help",
+        "*Commands:* /mode /persona /providers /model /lang /memory /connectors /skills /github /history "
+        "/rename /usage /new /stop /help",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(buttons),
     )
+
+
+async def cmd_imagine(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _guard(update):
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /imagine a neon cyberpunk city at sunset, cinematic lighting")
+        return
+    prompt = " ".join(context.args)
+    await on_message_with_text(update, context, f"Generate an image of: {prompt}")
 
 
 async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -183,6 +212,62 @@ async def cmd_providers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "Pick your default model provider (add API keys in the web app's Settings for full control):",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
+
+
+MODEL_TAG_EMOJI = {"flagship": "🏆", "fast": "⚡", "coding": "💻", "vision": "👁", "default": "⭐"}
+
+
+def _model_button_label(m: dict) -> str:
+    tag = MODEL_TAG_EMOJI.get(m.get("tag", ""), "")
+    reasoning = "🧠" if m.get("reasoning") else ""
+    vision = "👁" if m.get("vision") and m.get("tag") != "vision" else ""
+    ctx = f" · {m['context_window']}" if m.get("context_window") else ""
+    return f"{tag}{reasoning}{vision} {m['display_name']}{ctx}".strip()
+
+
+async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _guard(update):
+        return
+    state = _chat_state(context)
+    provider_id = state.get("provider") or "nvidia"
+    models = await fetch_models(provider_id)
+    if not models:
+        await update.message.reply_text(f"No curated models found for provider '{provider_id}'.")
+        return
+    buttons = [[InlineKeyboardButton(_model_button_label(m), callback_data=f"model:{m['id']}")] for m in models[:24]]
+    await update.message.reply_text(
+        f"🧬 Pick a model for *{provider_id}* (🏆 flagship · ⚡ fast · 💻 coding · 👁 vision · 🧠 reasoning):",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def cmd_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _guard(update):
+        return
+    buttons = [
+        [InlineKeyboardButton(label, callback_data=f"lang:{code}") for code, label in LANGUAGE_CHOICES[i:i + 2]]
+        for i in range(0, len(LANGUAGE_CHOICES), 2)
+    ]
+    await update.message.reply_text("🌐 Choose the language Meiko should reply in:", reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def cmd_memory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _guard(update):
+        return
+    user_id = _user_id(update)
+    memories = await get_memories(user_id)
+    if not memories:
+        await update.message.reply_text(
+            "🧠 I don't have any long-term memories about you yet — as we chat, I'll save durable facts "
+            "(preferences, ongoing projects, etc.) here automatically."
+        )
+        return
+    lines = ["*What I remember about you:*"]
+    for m in memories[:30]:
+        lines.append(f"• {m['fact']}")
+    buttons = [[InlineKeyboardButton("🗑 Forget everything", callback_data="mem_clear")]]
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 async def cmd_connectors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -318,6 +403,19 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
     elif data == "menu:history":
         await _send_history(query.message, user_id)
+    elif data == "menu:model":
+        provider_id = state.get("provider") or "nvidia"
+        models = await fetch_models(provider_id)
+        buttons = [[InlineKeyboardButton(_model_button_label(m), callback_data=f"model:{m['id']}")] for m in models[:24]]
+        await query.edit_message_text(
+            f"🧬 Pick a model for *{provider_id}*:", parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    elif data == "menu:lang":
+        buttons = [
+            [InlineKeyboardButton(label, callback_data=f"lang:{code}") for code, label in LANGUAGE_CHOICES[i:i + 2]]
+            for i in range(0, len(LANGUAGE_CHOICES), 2)
+        ]
+        await query.edit_message_text("🌐 Choose the language Meiko should reply in:", reply_markup=InlineKeyboardMarkup(buttons))
     elif data.startswith("mode:"):
         mode_id = data.split(":", 1)[1]
         state["mode"] = mode_id
@@ -329,8 +427,26 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     elif data.startswith("provider:"):
         provider_id = data.split(":", 1)[1]
         state["provider"] = provider_id
+        state["model"] = None
         await set_user_settings(user_id, provider=provider_id)
-        await query.edit_message_text(f"✅ Default provider set to *{provider_id}*.", parse_mode=ParseMode.MARKDOWN)
+        await query.edit_message_text(
+            f"✅ Default provider set to *{provider_id}*.\nUse /model to pick a specific model for it.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    elif data.startswith("model:"):
+        model_id = data.split(":", 1)[1]
+        state["model"] = model_id
+        await set_user_settings(user_id, model=model_id)
+        await query.edit_message_text(f"✅ Model set to `{model_id}`.", parse_mode=ParseMode.MARKDOWN)
+    elif data.startswith("lang:"):
+        lang_code = data.split(":", 1)[1]
+        state["ui_language"] = lang_code
+        await set_user_settings(user_id, ui_language=lang_code)
+        label = next((label for code, label in LANGUAGE_CHOICES if code == lang_code), lang_code)
+        await query.edit_message_text(f"✅ I'll reply in {label} from now on.")
+    elif data == "mem_clear":
+        await clear_memories(user_id)
+        await query.edit_message_text("🗑 Cleared everything I remembered about you.")
     elif data.startswith("connector:"):
         connector_id = data.split(":", 1)[1]
         connectors = await fetch_connectors()
@@ -391,6 +507,7 @@ async def _run_chat_turn(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
     final_text = ""
     new_conversation_id = None
     had_error = False
+    generated_images: list[str] = []
 
     def compose() -> str:
         parts = []
@@ -411,6 +528,8 @@ async def _run_chat_turn(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
             session_id=state["session_id"],
             persona_id=state["persona_id"],
             provider=state.get("provider"),
+            model=state.get("model"),
+            ui_language=state.get("ui_language"),
         ):
             etype = event.get("type")
             if etype == "conversation_created":
@@ -427,6 +546,11 @@ async def _run_chat_turn(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
                 if now - last_edit > config.EDIT_THROTTLE_SECONDS:
                     await _safe_edit(placeholder, compose()[-3800:])
                     last_edit = now
+            elif etype == "tool_result":
+                if event.get("name") == "generate_image":
+                    result = str(event.get("result", ""))
+                    if result.startswith("images/"):
+                        generated_images.append(result[len("images/"):])
             elif etype == "provider_switch":
                 tool_lines.append(f"⚠️ switched provider: {event.get('from')} → {event.get('to')}")
             elif etype == "token":
@@ -451,6 +575,14 @@ async def _run_chat_turn(update: Update, context: ContextTypes.DEFAULT_TYPE, tex
             if citations_text:
                 display_final = f"{display_final}\n\n{citations_text}"
             await _safe_edit(placeholder, display_final[:4000])
+            for img_filename in generated_images:
+                try:
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=download_url(state["session_id"], img_filename),
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("failed to send generated image %s", img_filename)
             try:
                 await context.bot.set_message_reaction(
                     chat_id=update.effective_chat.id,
@@ -540,9 +672,13 @@ async def _post_init(app: Application) -> None:
     await app.bot.set_my_commands([
         BotCommand("start", "Welcome & quick menu"),
         BotCommand("new", "Start a fresh conversation"),
+        BotCommand("imagine", "Generate an image from a text prompt"),
         BotCommand("mode", "Switch agent mode"),
         BotCommand("persona", "Switch persona"),
         BotCommand("providers", "Switch model provider"),
+        BotCommand("model", "Pick a specific model (DeepSeek, Kimi, GLM, Qwen...)"),
+        BotCommand("lang", "Set the language Meiko replies in"),
+        BotCommand("memory", "See/clear what Meiko remembers about you"),
         BotCommand("connectors", "Toggle connectors (GitHub, Wikipedia...)"),
         BotCommand("skills", "List available skills"),
         BotCommand("github", "Set your GitHub token for read/write repo tools"),
@@ -563,10 +699,14 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("new", cmd_new))
+    app.add_handler(CommandHandler("imagine", cmd_imagine))
     app.add_handler(CommandHandler("stop", cmd_stop))
     app.add_handler(CommandHandler("mode", cmd_mode))
     app.add_handler(CommandHandler("persona", cmd_persona))
     app.add_handler(CommandHandler("providers", cmd_providers))
+    app.add_handler(CommandHandler("model", cmd_model))
+    app.add_handler(CommandHandler("lang", cmd_lang))
+    app.add_handler(CommandHandler("memory", cmd_memory))
     app.add_handler(CommandHandler("connectors", cmd_connectors))
     app.add_handler(CommandHandler("skills", cmd_skills))
     app.add_handler(CommandHandler("github", cmd_github))

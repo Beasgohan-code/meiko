@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 import { pulseElement, shakeElement } from "../lib/animations";
+import { useI18n } from "../lib/i18n";
 
 interface ComposerProps {
   onSend: (text: string) => void;
@@ -10,6 +11,7 @@ interface ComposerProps {
 }
 
 export default function Composer({ onSend, onAttach, isStreaming, onStop }: ComposerProps) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const btnRef = useRef<HTMLButtonElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ export default function Composer({ onSend, onAttach, isStreaming, onStop }: Comp
   return (
     <div className="composer-wrap">
       <div className="composer" ref={wrapRef}>
-        <button className="composer-btn" title="Attach image or file" onClick={() => fileInputRef.current?.click()}>
+        <button className="composer-btn" title={t("attach")} onClick={() => fileInputRef.current?.click()}>
           <Paperclip size={17} />
         </button>
         <input
@@ -51,7 +53,7 @@ export default function Composer({ onSend, onAttach, isStreaming, onStop }: Comp
           }}
         />
         <textarea
-          placeholder="Message Meiko… (Shift+Enter for newline)"
+          placeholder={t("composerPlaceholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}

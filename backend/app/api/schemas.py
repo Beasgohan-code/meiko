@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     persona_id: Optional[str] = None
     image_paths: Optional[list[str]] = None
     enable_fallback: bool = True
+    ui_language: Optional[str] = None  # e.g. "es", "hi", "fr" — nudges the agent to reply in this language
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -26,6 +27,7 @@ class SettingsUpdateRequest(BaseModel):
     persona: Optional[str] = None
     api_keys: Optional[dict[str, str]] = None
     theme: Optional[str] = None
+    ui_language: Optional[str] = None
 
 
 class NewConversationRequest(BaseModel):

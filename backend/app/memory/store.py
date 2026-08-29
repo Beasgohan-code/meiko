@@ -84,6 +84,7 @@ class Store:
         migrations = [
             ("conversations", "pinned", "INTEGER DEFAULT 0"),
             ("conversations", "mode", "TEXT DEFAULT 'autonomous'"),
+            ("user_settings", "ui_language", "TEXT DEFAULT 'en'"),
         ]
         for table, column, coltype in migrations:
             try:
@@ -227,9 +228,10 @@ class Store:
             cur = await db.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
             row = await cur.fetchone()
             if not row:
-                return {"user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {}, "persona": ""}
+                return {"user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {}, "persona": "", "ui_language": "en"}
             d = dict(row)
             d["api_keys"] = json.loads(d.get("api_keys") or "{}")
+            d.setdefault("ui_language", "en")
             return d
 
     async def set_user_settings(
@@ -239,6 +241,7 @@ class Store:
         model: Optional[str] = None,
         api_keys: Optional[dict[str, str]] = None,
         persona: Optional[str] = None,
+        ui_language: Optional[str] = None,
     ) -> None:
         current = await self.get_user_settings(user_id)
         merged_keys = current["api_keys"]
@@ -247,13 +250,14 @@ class Store:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, ui_language, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     provider = excluded.provider,
                     model = excluded.model,
                     api_keys = excluded.api_keys,
                     persona = excluded.persona,
+                    ui_language = excluded.ui_language,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -262,6 +266,7 @@ class Store:
                     model if model is not None else current["model"],
                     json.dumps(merged_keys),
                     persona if persona is not None else current["persona"],
+                    ui_language if ui_language is not None else current.get("ui_language", "en"),
                     time.time(),
                 ),
             )
@@ -285,6 +290,26 @@ class Store:
             )
             rows = await cur.fetchall()
             return [r[0] for r in rows]
+
+    async def list_memories_full(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit)
+            )
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def delete_memory(self, memory_id: str) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+            await db.commit()
+
+    async def clear_memories(self, user_id: str) -> None:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM memories WHERE user_id = ?", (user_id,))
+            await db.commit()
+
 
 
 _store: Optional[Store] = None

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, Sparkles } from "lucide-react";
+import { Menu, Sparkles, Globe } from "lucide-react";
 import MeikoOrb from "./components/MeikoOrb";
 import Sidebar from "./components/Sidebar";
 import MessageBubble from "./components/MessageBubble";
@@ -8,6 +8,7 @@ import SettingsModal from "./components/SettingsModal";
 import { AgentEvent, AgentModeMeta, PersonaMeta, fetchModes, fetchPersonas, streamChat, uploadFile } from "./lib/api";
 import { useMeikoStore } from "./lib/store";
 import { animateHeroText, animateStagger } from "./lib/animations";
+import { useI18n, SUPPORTED_LANGUAGES } from "./lib/i18n";
 
 const SUGGESTIONS = [
   "Research the latest breakthroughs in fusion energy",
@@ -46,7 +47,9 @@ export default function App() {
   const [personas, setPersonas] = useState<PersonaMeta[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [orbState, setOrbState] = useState<"idle" | "thinking" | "speaking" | "tool">("idle");
+  const { t, lang, setLang } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const suggestRef = useRef<HTMLDivElement>(null);
@@ -91,6 +94,7 @@ export default function App() {
           provider,
           model,
           personaId,
+          uiLanguage: lang !== "en" ? lang : undefined,
         },
         (event: AgentEvent) => {
           switch (event.type) {
@@ -195,6 +199,33 @@ export default function App() {
               </div>
             </div>
           </div>
+          <div style={{ position: "relative" }}>
+            <button
+              className="composer-btn"
+              title={t("language")}
+              onClick={() => setLangMenuOpen((o) => !o)}
+              style={{ marginRight: 10 }}
+            >
+              <Globe size={18} />
+            </button>
+            {langMenuOpen && (
+              <div className="lang-menu">
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    className={`lang-menu-item ${l.code === lang ? "active" : ""}`}
+                    onClick={() => {
+                      setLang(l.code);
+                      setLangMenuOpen(false);
+                    }}
+                  >
+                    <span style={{ marginRight: 8 }}>{l.flag}</span>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <MeikoOrb state={orbState} size={44} />
         </div>
 
@@ -203,11 +234,8 @@ export default function App() {
             {messages.length === 0 ? (
               <div className="hero" ref={heroRef}>
                 <MeikoOrb state="idle" size={180} />
-                <h1>Hey, I'm Meiko.</h1>
-                <p>
-                  Your open, pluggable AI agent — research, code, create, and automate. Bring your own free API
-                  key (NVIDIA, Gemini, Groq & more) and I'll get to work.
-                </p>
+                <h1>{t("heroTitle")}</h1>
+                <p>{t("heroSubtitle")}</p>
                 <div className="suggestion-row" ref={suggestRef}>
                   {SUGGESTIONS.map((s) => (
                     <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>

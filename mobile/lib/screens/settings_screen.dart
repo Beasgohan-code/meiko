@@ -24,21 +24,61 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     final meiko = context.read<MeikoProvider>();
     _urlController = TextEditingController(text: meiko.backendUrl);
     _personaController = TextEditingController();
     _githubTokenController = TextEditingController();
     _activeProvider = meiko.provider ?? 'nvidia';
+    _activeModel = meiko.model;
     meiko.api.getUserSettings(meiko.userId).then((s) {
       if (s['persona'] != null) _personaController.text = s['persona'];
       if (s['provider'] != null) setState(() => _activeProvider = s['provider']);
+      if (s['model'] != null && (s['model'] as String).isNotEmpty) setState(() => _activeModel = s['model']);
+      if (s['ui_language'] != null) setState(() => _replyLanguage = s['ui_language']);
     });
     meiko.loadSkills().then((s) => setState(() => _skills = s));
+    _loadModels();
+    _loadMemories();
   }
 
   List<SkillMeta> _skills = [];
+  List<ModelMeta> _models = [];
+  List<MemoryFact> _memories = [];
+  String? _activeModel;
+  String _replyLanguage = 'en';
   late TextEditingController _githubTokenController;
+
+  static const List<Map<String, String>> _languages = [
+    {'code': 'en', 'flag': '🇬🇧', 'label': 'English'},
+    {'code': 'es', 'flag': '🇪🇸', 'label': 'Español'},
+    {'code': 'fr', 'flag': '🇫🇷', 'label': 'Français'},
+    {'code': 'de', 'flag': '🇩🇪', 'label': 'Deutsch'},
+    {'code': 'hi', 'flag': '🇮🇳', 'label': 'हिन्दी'},
+    {'code': 'pt', 'flag': '🇵🇹', 'label': 'Português'},
+    {'code': 'ar', 'flag': '🇸🇦', 'label': 'العربية'},
+    {'code': 'ja', 'flag': '🇯🇵', 'label': '日本語'},
+    {'code': 'zh', 'flag': '🇨🇳', 'label': '中文'},
+    {'code': 'ru', 'flag': '🇷🇺', 'label': 'Русский'},
+    {'code': 'ko', 'flag': '🇰🇷', 'label': '한국어'},
+    {'code': 'id', 'flag': '🇮🇩', 'label': 'Bahasa Indonesia'},
+  ];
+
+  Future<void> _loadModels() async {
+    final meiko = context.read<MeikoProvider>();
+    final models = await meiko.api.fetchModels(_activeProvider ?? 'nvidia');
+    if (mounted) setState(() => _models = models);
+  }
+
+  Future<void> _loadMemories() async {
+    final meiko = context.read<MeikoProvider>();
+    try {
+      final memories = await meiko.api.fetchMemories(meiko.userId);
+      if (mounted) setState(() => _memories = memories);
+    } catch (_) {
+      // ignore — leave memories empty
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +90,13 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: const [Tab(text: 'Providers'), Tab(text: 'Connectors'), Tab(text: 'Skills'), Tab(text: 'Server & Persona')],
+          tabs: const [
+            Tab(text: 'Providers'),
+            Tab(text: 'Connectors'),
+            Tab(text: 'Skills'),
+            Tab(text: 'Memory'),
+            Tab(text: 'Server & Persona'),
+          ],
         ),
       ),
       body: TabBarView(
@@ -59,6 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           _buildProvidersTab(meiko),
           _buildConnectorsTab(meiko),
           _buildSkillsTab(meiko),
+          _buildMemoryTab(meiko),
           _buildServerTab(meiko),
         ],
       ),
@@ -77,6 +124,87 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         const SizedBox(height: 14),
         ...meiko.providers.map((p) => _providerCard(p)),
         const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Pick a model — $_activeProvider', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 4),
+                const Text(
+                  'NVIDIA alone offers 20+ free curated models (DeepSeek, Kimi, GLM, Qwen, Llama, Mistral, Nemotron…).',
+                  style: TextStyle(fontSize: 11.5, color: MeikoColors.text2),
+                ),
+                const SizedBox(height: 8),
+                if (_models.isEmpty) const Text('Loading models…', style: TextStyle(color: MeikoColors.text2)),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _models.map((m) {
+                    final selected = _activeModel == m.id;
+                    return GestureDetector(
+                      onTap: () => setState(() => _activeModel = m.id),
+                      child: Container(
+                        width: 160,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: selected ? MeikoColors.violet.withOpacity(0.15) : Colors.white.withOpacity(0.02),
+                          border: Border.all(color: selected ? MeikoColors.violet : MeikoColors.border),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(m.displayName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                if (m.tag.isNotEmpty) _miniBadge(m.tag),
+                                if (m.reasoning) _miniBadge('reasoning'),
+                                if (m.vision) _miniBadge('vision'),
+                                if (m.contextWindow.isNotEmpty) _miniBadge(m.contextWindow),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Reply language', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 4),
+                const Text(
+                  'Meiko will reply in this language regardless of your device language.',
+                  style: TextStyle(fontSize: 11.5, color: MeikoColors.text2),
+                ),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  value: _replyLanguage,
+                  isExpanded: true,
+                  dropdownColor: MeikoColors.panel,
+                  items: _languages
+                      .map((l) => DropdownMenuItem(value: l['code'], child: Text('${l['flag']} ${l['label']}')))
+                      .toList(),
+                  onChanged: (v) => setState(() => _replyLanguage = v ?? 'en'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         ElevatedButton(
           onPressed: () async {
             setState(() => _saveStatus = 'Saving…');
@@ -87,14 +215,65 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             await meiko.api.updateUserSettings(
               userId: meiko.userId,
               provider: _activeProvider,
+              model: _activeModel,
               apiKeys: keys,
+              uiLanguage: _replyLanguage,
             );
-            meiko.setProvider(_activeProvider, null);
+            meiko.setProvider(_activeProvider, _activeModel);
             setState(() => _saveStatus = 'Saved ✓');
           },
           style: ElevatedButton.styleFrom(backgroundColor: MeikoColors.violet, minimumSize: const Size.fromHeight(46)),
           child: Text(_saveStatus.isEmpty ? 'Save provider settings' : _saveStatus),
         ),
+      ],
+    );
+  }
+
+  Widget _miniBadge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(999)),
+      child: Text(text, style: const TextStyle(fontSize: 9, color: MeikoColors.text2)),
+    );
+  }
+
+  Widget _buildMemoryTab(MeikoProvider meiko) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          "Meiko saves durable facts about you across sessions (preferences, ongoing projects, etc.). "
+          "Review or clear what it knows here.",
+          style: TextStyle(color: MeikoColors.text2, fontSize: 12.5),
+        ),
+        const SizedBox(height: 10),
+        if (_memories.isEmpty) const Text("I don't have any long-term memories about you yet.", style: TextStyle(color: MeikoColors.text2)),
+        ..._memories.map((m) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                dense: true,
+                title: Text(m.fact, style: const TextStyle(fontSize: 12.5)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: MeikoColors.text2),
+                  onPressed: () async {
+                    await meiko.api.deleteMemory(m.id);
+                    _loadMemories();
+                  },
+                ),
+              ),
+            )),
+        if (_memories.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton(
+              onPressed: () async {
+                await meiko.api.clearMemories(meiko.userId);
+                _loadMemories();
+              },
+              style: OutlinedButton.styleFrom(foregroundColor: MeikoColors.danger, minimumSize: const Size.fromHeight(44)),
+              child: const Text('Clear all'),
+            ),
+          ),
       ],
     );
   }
@@ -114,7 +293,13 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   value: p.id,
                   groupValue: _activeProvider,
                   activeColor: MeikoColors.violet,
-                  onChanged: (v) => setState(() => _activeProvider = v),
+                  onChanged: (v) {
+                    setState(() {
+                      _activeProvider = v;
+                      _activeModel = null;
+                    });
+                    _loadModels();
+                  },
                 ),
                 Expanded(child: Text(p.displayName, style: const TextStyle(fontWeight: FontWeight.w600))),
                 if (p.freeTier)

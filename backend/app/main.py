@@ -51,6 +51,7 @@ from .memory.store import get_store
 from .plugins.manager import get_connector_manager
 from .providers.base import ChatMessage
 from .providers.registry import list_provider_meta
+from .providers.model_catalog import list_models
 
 settings = get_settings()
 setup_logging(settings.LOG_LEVEL)
@@ -121,6 +122,11 @@ async def get_providers():
     return [meta.__dict__ for meta in list_provider_meta()]
 
 
+@app.get("/api/models")
+async def get_models(provider: str = Query("nvidia")):
+    return [m.__dict__ for m in list_models(provider)]
+
+
 @app.get("/api/modes")
 async def get_modes():
     return [
@@ -170,7 +176,7 @@ async def update_settings_route(payload: SettingsUpdateRequest):
     store = get_store()
     await store.set_user_settings(
         payload.user_id, provider=payload.provider, model=payload.model,
-        api_keys=payload.api_keys, persona=payload.persona,
+        api_keys=payload.api_keys, persona=payload.persona, ui_language=payload.ui_language,
     )
     return {"ok": True}
 
@@ -246,6 +252,27 @@ async def pin_conversation(conversation_id: str, pinned: bool = Query(True)):
 async def get_usage(user_id: str = Query("default"), days: int = Query(30, ge=1, le=365)):
     store = get_store()
     return await store.get_usage_summary(user_id, days)
+
+
+# ---------------- Persistent memory (Mira-style "what I remember about you") ----------------
+@app.get("/api/memories", dependencies=[Depends(require_api_key)])
+async def get_memories(user_id: str = Query("default")):
+    store = get_store()
+    return await store.list_memories_full(user_id)
+
+
+@app.delete("/api/memories/{memory_id}", dependencies=[Depends(require_api_key)])
+async def delete_memory(memory_id: str):
+    store = get_store()
+    await store.delete_memory(memory_id)
+    return {"ok": True}
+
+
+@app.delete("/api/memories", dependencies=[Depends(require_api_key)])
+async def clear_memories(user_id: str = Query("default")):
+    store = get_store()
+    await store.clear_memories(user_id)
+    return {"ok": True}
 
 
 # ---------------- Connectors / Plugins ----------------
@@ -340,6 +367,13 @@ async def chat_stream(payload: ChatRequest):
         persona_text_parts.append(payload.persona)
     elif user_settings.get("persona"):
         persona_text_parts.append(user_settings["persona"])
+    effective_ui_language = payload.ui_language or user_settings.get("ui_language")
+    if effective_ui_language and effective_ui_language.lower() not in ("en", "en-us", "en-gb", ""):
+        persona_text_parts.append(
+            f"Always reply in the following language/locale unless the user explicitly asks for another "
+            f"language: {effective_ui_language}. Translate technical terms naturally, keep code blocks and "
+            f"identifiers unchanged."
+        )
     persona = "\n\n".join(persona_text_parts) or None
 
     history_rows = await store.get_messages(conversation_id, limit=40)

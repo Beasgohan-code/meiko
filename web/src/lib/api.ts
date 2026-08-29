@@ -66,6 +66,24 @@ export interface ConnectorMeta {
   actions: string[];
 }
 
+export interface ModelMeta {
+  id: string;
+  display_name: string;
+  family: string;
+  reasoning: boolean;
+  vision: boolean;
+  context_window: string;
+  good_for: string[];
+  tag: string;
+}
+
+export interface MemoryFact {
+  id: string;
+  user_id: string;
+  fact: string;
+  created_at: number;
+}
+
 const BASE_URL = (import.meta as any).env?.VITE_BACKEND_URL || "";
 
 function headers(apiKey?: string) {
@@ -81,6 +99,29 @@ export async function fetchProviders(): Promise<ProviderMeta[]> {
 
 export async function fetchModes(): Promise<AgentModeMeta[]> {
   const res = await fetch(`${BASE_URL}/api/modes`);
+  return res.json();
+}
+
+export async function fetchModels(provider: string): Promise<ModelMeta[]> {
+  const res = await fetch(`${BASE_URL}/api/models?provider=${encodeURIComponent(provider)}`);
+  return res.json();
+}
+
+export async function fetchMemories(userId: string): Promise<MemoryFact[]> {
+  const res = await fetch(`${BASE_URL}/api/memories?user_id=${encodeURIComponent(userId)}`, { headers: headers() });
+  return res.json();
+}
+
+export async function deleteMemory(memoryId: string) {
+  const res = await fetch(`${BASE_URL}/api/memories/${memoryId}`, { method: "DELETE", headers: headers() });
+  return res.json();
+}
+
+export async function clearMemories(userId: string) {
+  const res = await fetch(`${BASE_URL}/api/memories?user_id=${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
   return res.json();
 }
 
@@ -126,6 +167,7 @@ export async function updateUserSettings(payload: {
   model?: string;
   persona?: string;
   api_keys?: Record<string, string>;
+  ui_language?: string;
 }) {
   const res = await fetch(`${BASE_URL}/api/settings`, {
     method: "POST",
@@ -216,6 +258,7 @@ export interface ChatStreamParams {
   personaId?: string;
   imagePaths?: string[];
   enableFallback?: boolean;
+  uiLanguage?: string;
 }
 
 /**
@@ -243,6 +286,7 @@ export async function streamChat(
       persona_id: params.personaId,
       image_paths: params.imagePaths,
       enable_fallback: params.enableFallback ?? true,
+      ui_language: params.uiLanguage,
     }),
   });
 

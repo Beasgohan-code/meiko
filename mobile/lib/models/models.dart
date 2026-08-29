@@ -154,6 +154,49 @@ class SkillMeta {
       );
 }
 
+class ModelMeta {
+  final String id;
+  final String displayName;
+  final String family;
+  final bool reasoning;
+  final bool vision;
+  final String contextWindow;
+  final List<String> goodFor;
+  final String tag;
+
+  ModelMeta({
+    required this.id,
+    required this.displayName,
+    required this.family,
+    required this.reasoning,
+    required this.vision,
+    required this.contextWindow,
+    required this.goodFor,
+    required this.tag,
+  });
+
+  factory ModelMeta.fromJson(Map<String, dynamic> json) => ModelMeta(
+        id: json['id'] as String,
+        displayName: json['display_name'] as String? ?? json['id'] as String,
+        family: json['family'] as String? ?? '',
+        reasoning: json['reasoning'] as bool? ?? false,
+        vision: json['vision'] as bool? ?? false,
+        contextWindow: json['context_window'] as String? ?? '',
+        goodFor: (json['good_for'] as List? ?? []).map((e) => e.toString()).toList(),
+        tag: json['tag'] as String? ?? '',
+      );
+}
+
+class MemoryFact {
+  final String id;
+  final String fact;
+
+  MemoryFact({required this.id, required this.fact});
+
+  factory MemoryFact.fromJson(Map<String, dynamic> json) =>
+      MemoryFact(id: json['id'] as String, fact: json['fact'] as String? ?? '');
+}
+
 class ConversationSummary {
   final String id;
   final String title;
