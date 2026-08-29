@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: meiko-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - meiko-data:/app/data
+
+  telegram-bot:
+    build: ./telegram-bot
+    container_name: meiko-telegram-bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - ./telegram-bot/.env
+    environment:
+      - MEIKO_BACKEND_URL=http://backend:8000
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: meiko-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  meiko-data:

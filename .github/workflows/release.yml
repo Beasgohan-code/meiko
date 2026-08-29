@@ -43,10 +43,10 @@ jobs:
           mkdir -p dist_bundle
           cp -r web/dist dist_bundle/web-app
           cp mobile/build/app/outputs/flutter-apk/app-release.apk dist_bundle/meiko.apk
-          cp -r backend dist_bundle/backend --parents 2>/dev/null || cp -r backend dist_bundle/
-          cp -r telegram-bot dist_bundle/
-          cp -r cli dist_bundle/
-          cp README.md dist_bundle/ 2>/dev/null || true
+          cp -r backend dist_bundle/backend
+          cp -r telegram-bot dist_bundle/telegram-bot
+          cp -r cli dist_bundle/cli
+          cp README.md dist_bundle/README.md
           cd dist_bundle && zip -r ../meiko-release-bundle.zip . && cd ..
 
       - name: Upload bundle artifact
