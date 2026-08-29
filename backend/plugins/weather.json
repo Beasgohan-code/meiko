@@ -1,0 +1,26 @@
+{
+  "id": "weather",
+  "name": "Open-Meteo Weather",
+  "description": "Free, keyless weather forecast lookup by latitude/longitude.",
+  "base_url": "https://api.open-meteo.com/v1",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "get_weather_forecast",
+      "description": "Get current weather + short forecast for a given latitude/longitude.",
+      "method": "GET",
+      "path": "/forecast",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" },
+          "current": { "type": "string", "default": "temperature_2m,wind_speed_10m,relative_humidity_2m,weather_code" }
+        },
+        "required": ["latitude", "longitude"]
+      },
+      "query_params": ["latitude", "longitude", "current"]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "wikipedia",
+  "name": "Wikipedia",
+  "description": "Look up encyclopedic summaries from Wikipedia (free, no key required).",
+  "base_url": "https://en.wikipedia.org/api/rest_v1",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "wikipedia_summary",
+      "description": "Get a short summary of a Wikipedia topic/page title.",
+      "method": "GET",
+      "path": "/page/summary/{title}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Exact or close Wikipedia page title, e.g. 'Alan_Turing'" }
+        },
+        "required": ["title"]
+      },
+      "path_params": ["title"]
+    }
+  ]
+}
