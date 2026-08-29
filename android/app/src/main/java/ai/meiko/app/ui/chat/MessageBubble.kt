@@ -33,7 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.jeziellago.compose.markdowntext.MarkdownText
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import ai.meiko.app.data.ChatMessage
 import ai.meiko.app.data.ChatRole
 import ai.meiko.app.data.PlanTaskStatus

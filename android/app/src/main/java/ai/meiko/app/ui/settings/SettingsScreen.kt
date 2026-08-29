@@ -1,8 +1,10 @@
 package ai.meiko.app.ui.settings
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,6 +62,7 @@ private val LANGUAGES = listOf(
     "pt" to "Português", "ru" to "Русский", "ml" to "മലയാളം", "ko" to "한국어",
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: MeikoViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsState()

@@ -1,5 +1,6 @@
 package ai.meiko.app.ui.chat
 
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -59,6 +60,7 @@ private val SUGGESTIONS = listOf(
     "Explain transformers like I'm five",
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: MeikoViewModel, onOpenSettings: () -> Unit, onOpenHistory: () -> Unit) {
     val state by viewModel.state.collectAsState()
