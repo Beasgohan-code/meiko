@@ -89,6 +89,18 @@ export async function fetchPersonas(): Promise<PersonaMeta[]> {
   return res.json();
 }
 
+export interface SkillMeta {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+}
+
+export async function fetchSkills(): Promise<SkillMeta[]> {
+  const res = await fetch(`${BASE_URL}/api/skills`);
+  return res.json();
+}
+
 export async function fetchConnectors(): Promise<ConnectorMeta[]> {
   const res = await fetch(`${BASE_URL}/api/connectors`);
   return res.json();

@@ -11,6 +11,7 @@ import '../widgets/composer.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/meiko_orb.dart';
 import 'settings_screen.dart';
+import 'history_screen.dart';
 
 const _modeIcons = {
   'chat': Icons.chat_bubble_outline,
@@ -193,7 +194,23 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen()));
+                },
+                icon: const Icon(Icons.history, size: 16),
+                label: const Text('History'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: MeikoColors.text1,
+                  side: const BorderSide(color: MeikoColors.border),
+                  minimumSize: const Size.fromHeight(40),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text('AGENT MODE', style: TextStyle(fontSize: 11, color: MeikoColors.text2, letterSpacing: 1)),

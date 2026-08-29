@@ -103,6 +103,59 @@ class MeikoProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<List<ConversationSummary>> loadHistory({String? query}) async {
+    try {
+      if (query != null && query.trim().isNotEmpty) {
+        return await api.searchConversations(userId, query.trim());
+      }
+      return await api.listConversations(userId);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> openConversation(String id) async {
+    try {
+      final rows = await api.getConversationMessages(id);
+      messages.clear();
+      for (final r in rows) {
+        final role = r['role'] as String?;
+        if (role != 'user' && role != 'assistant') continue;
+        messages.add(ChatMessage(
+          id: _uuid.v4(),
+          role: role == 'user' ? ChatRole.user : ChatRole.assistant,
+          content: r['content'] as String? ?? '',
+        ));
+      }
+      conversationId = id;
+      sessionId = id;
+      notifyListeners();
+    } catch (_) {
+      // ignore — leave current state as-is
+    }
+  }
+
+  Future<void> renameConversation(String id, String title) async {
+    await api.renameConversation(id, title);
+  }
+
+  Future<void> deleteConversation(String id) async {
+    await api.deleteConversation(id);
+    if (id == conversationId) newConversation();
+  }
+
+  Future<void> pinConversation(String id, bool pinned) async {
+    await api.pinConversation(id, pinned);
+  }
+
+  Future<List<SkillMeta>> loadSkills() async {
+    try {
+      return await api.fetchSkills();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<void> sendMessage(String text) async {
     final userMsg = ChatMessage(id: _uuid.v4(), role: ChatRole.user, content: text);
     messages.add(userMsg);
@@ -154,11 +207,31 @@ class MeikoProvider extends ChangeNotifier {
               }
               notifyListeners();
               break;
+            case 'plan_update':
+              final tasks = (event['tasks'] as List? ?? []).map((e) => PlanTask.fromJson(e as Map<String, dynamic>)).toList();
+              assistantMsg.plan = tasks;
+              notifyListeners();
+              break;
+            case 'citations':
+              final sources = (event['sources'] as List? ?? []).map((e) => Citation.fromJson(e as Map<String, dynamic>)).toList();
+              assistantMsg.citations = sources;
+              notifyListeners();
+              break;
+            case 'provider_switch':
+              final from = event['from'] as String? ?? '?';
+              final to = event['to'] as String? ?? '?';
+              assistantMsg.providerNotices.add('Switched from $from to $to after an error — continuing automatically.');
+              notifyListeners();
+              break;
             case 'final':
               finalText = event['text'] as String? ?? '';
               break;
             case 'error':
               assistantMsg.error = event['message'] as String?;
+              break;
+            case 'conversation_created':
+              final cid = event['conversation_id'] as String?;
+              if (cid != null && conversationId == null) conversationId = cid;
               break;
             case 'done':
               final cid = event['conversation_id'] as String?;

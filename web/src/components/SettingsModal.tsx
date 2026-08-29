@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { X, Github, Sparkles } from "lucide-react";
 import {
   ConnectorMeta,
   ProviderMeta,
+  SkillMeta,
   fetchConnectors,
   fetchProviders,
+  fetchSkills,
   getUserSettings,
   toggleConnector,
   updateUserSettings,
@@ -17,17 +19,20 @@ interface Props {
 
 export default function SettingsModal({ onClose }: Props) {
   const { userId, provider, setProvider } = useMeikoStore();
-  const [tab, setTab] = useState<"providers" | "connectors" | "persona">("providers");
+  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "persona">("providers");
   const [providers, setProviders] = useState<ProviderMeta[]>([]);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
+  const [skills, setSkills] = useState<SkillMeta[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [activeProvider, setActiveProvider] = useState(provider || "nvidia");
   const [customPersona, setCustomPersona] = useState("");
   const [saveStatus, setSaveStatus] = useState<string>("");
+  const [githubStatus, setGithubStatus] = useState<string>("");
 
   useEffect(() => {
     fetchProviders().then(setProviders);
     fetchConnectors().then(setConnectors);
+    fetchSkills().then(setSkills);
     getUserSettings(userId).then((s) => {
       if (s.provider) setActiveProvider(s.provider);
       if (s.persona) setCustomPersona(s.persona);
@@ -51,6 +56,16 @@ export default function SettingsModal({ onClose }: Props) {
     setTimeout(() => setSaveStatus(""), 1500);
   };
 
+  const saveGithubToken = async () => {
+    setGithubStatus("Saving…");
+    await updateUserSettings({
+      user_id: userId,
+      api_keys: { github: keys.github || "" },
+    });
+    setGithubStatus("Saved ✓ — GitHub read/write tools are now active");
+    setTimeout(() => setGithubStatus(""), 2500);
+  };
+
   const handleToggleConnector = async (c: ConnectorMeta) => {
     await toggleConnector(c.id, !c.enabled);
     setConnectors((prev) => prev.map((x) => (x.id === c.id ? { ...x, enabled: !x.enabled } : x)));
@@ -72,6 +87,9 @@ export default function SettingsModal({ onClose }: Props) {
           </button>
           <button className={`tab-btn ${tab === "connectors" ? "active" : ""}`} onClick={() => setTab("connectors")}>
             Connectors
+          </button>
+          <button className={`tab-btn ${tab === "skills" ? "active" : ""}`} onClick={() => setTab("skills")}>
+            Skills
           </button>
           <button className={`tab-btn ${tab === "persona" ? "active" : ""}`} onClick={() => setTab("persona")}>
             Persona
@@ -126,6 +144,33 @@ export default function SettingsModal({ onClose }: Props) {
               Connectors give Meiko extra tools (like Claude Connectors / MCP). Toggle them on/off — Meiko will
               automatically use enabled ones when helpful.
             </p>
+
+            <div className="provider-card" style={{ marginBottom: 14 }}>
+              <div className="row">
+                <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Github size={16} /> GitHub (read + write)
+                </span>
+              </div>
+              <div className="desc">
+                Add a Personal Access Token with <code>repo</code> scope to let Meiko read files, commit changes,
+                open pull requests, and create issues in your repos — not just search public code.
+              </div>
+              <input
+                type="password"
+                placeholder="ghp_… (Personal Access Token)"
+                defaultValue={keys.github || ""}
+                onChange={(e) => saveKey("github", e.target.value)}
+              />
+              <div className="field-hint">
+                <a href="https://github.com/settings/tokens/new?scopes=repo&description=Meiko%20Agent" target="_blank" rel="noreferrer">
+                  Create a token on GitHub →
+                </a>
+              </div>
+              <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 8 }} onClick={saveGithubToken}>
+                {githubStatus || "Save GitHub token"}
+              </button>
+            </div>
+
             {connectors.map((c) => (
               <div className="connector-row" key={c.id}>
                 <div className="meta">
@@ -137,6 +182,29 @@ export default function SettingsModal({ onClose }: Props) {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === "skills" && (
+          <div>
+            <p className="field-hint" style={{ marginBottom: 10 }}>
+              Skills are reusable playbooks Meiko can load on demand for specialized tasks — like Claude's Agent
+              Skills. Meiko decides when to use one automatically; you don't need to toggle anything.
+            </p>
+            {skills.map((s) => (
+              <div className="provider-card" key={s.id}>
+                <div className="row">
+                  <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Sparkles size={14} /> {s.name}
+                  </span>
+                </div>
+                <div className="desc">{s.description}</div>
+                {s.triggers?.length > 0 && (
+                  <div className="field-hint">Triggers on: {s.triggers.join(", ")}</div>
+                )}
+              </div>
+            ))}
+            {skills.length === 0 && <div className="field-hint">No skills installed yet.</div>}
           </div>
         )}
 

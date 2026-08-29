@@ -49,6 +49,45 @@ class MeikoApi {
         headers: _headers, body: jsonEncode({'enabled': enabled}));
   }
 
+  Future<List<SkillMeta>> fetchSkills() async {
+    final res = await http.get(_u('/api/skills'));
+    final list = jsonDecode(res.body) as List;
+    return list.map((e) => SkillMeta.fromJson(e)).toList();
+  }
+
+  Future<List<ConversationSummary>> listConversations(String userId) async {
+    final res = await http.get(_u('/api/conversations?user_id=$userId'), headers: _headers);
+    final list = jsonDecode(res.body) as List;
+    return list.map((e) => ConversationSummary.fromJson(e)).toList();
+  }
+
+  Future<List<ConversationSummary>> searchConversations(String userId, String query) async {
+    final res = await http.get(
+      _u('/api/conversations/search?user_id=${Uri.encodeQueryComponent(userId)}&q=${Uri.encodeQueryComponent(query)}'),
+      headers: _headers,
+    );
+    final list = jsonDecode(res.body) as List;
+    return list.map((e) => ConversationSummary.fromJson(e)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getConversationMessages(String conversationId) async {
+    final res = await http.get(_u('/api/conversations/$conversationId/messages'), headers: _headers);
+    final list = jsonDecode(res.body) as List;
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  Future<void> renameConversation(String conversationId, String title) async {
+    await http.patch(_u('/api/conversations/$conversationId'), headers: _headers, body: jsonEncode({'title': title}));
+  }
+
+  Future<void> deleteConversation(String conversationId) async {
+    await http.delete(_u('/api/conversations/$conversationId'), headers: _headers);
+  }
+
+  Future<void> pinConversation(String conversationId, bool pinned) async {
+    await http.post(_u('/api/conversations/$conversationId/pin?pinned=$pinned'), headers: _headers);
+  }
+
   Future<Map<String, dynamic>> getUserSettings(String userId) async {
     final res = await http.get(_u('/api/settings?user_id=$userId'));
     return jsonDecode(res.body) as Map<String, dynamic>;

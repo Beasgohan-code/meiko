@@ -9,30 +9,51 @@ much like Claude's Connectors or a DeepSeek-style agent harness.
 
 ## ✨ Highlights
 
-- 🧠 **Full autonomous agent harness** — planning loop, tool-calling, memory, and 5 built-in
+- 🧠 **Full autonomous agent harness** — planning loop with live checklists (`update_plan`),
+  tool-calling, persistent memory, automatic provider fallback chains, and 5 built-in
   **Agent Modes**: Chat, Research, Code, Autonomous, Creative
+- 🧩 **Skills** — reusable, markdown-defined playbooks (Claude Agent Skills style) the agent loads
+  on demand: PDF report generation, web app scaffolding, competitive research, and easy to add more
+  by dropping a `SKILL.md` into `backend/skills/`
 - 🔌 **Connector/Plugin framework** — JSON-manifest connectors (no code needed to add a new API);
-  ships with GitHub, Wikipedia, Reddit, Hacker News, and Open-Meteo Weather
+  ships with Wikipedia, Reddit, Hacker News, and Open-Meteo Weather, plus a dedicated **GitHub
+  connector with full read + write** (browse files, commit/update files, open pull requests, create
+  issues) using a user-supplied Personal Access Token
+- 🖥️ **Bash + Python execution tools** — a sandboxed shell (`run_bash`) alongside `run_python`, so
+  Meiko can install packages, run git commands, build/test scripts, and generally act like a real
+  coding agent inside its per-session workspace
+- 📎 **Citations & provider resilience** — sources surfaced by web search/connectors are tracked and
+  shown with the final answer; if your active provider fails or is rate-limited, Meiko automatically
+  retries with the next configured provider instead of just erroring out
+- 🗂️ **Conversation management** — rename, delete, pin, and full-text search past conversations,
+  plus per-user usage analytics, across web, mobile, and Telegram
 - 🎭 **Persona library** — Engineer, Research Analyst, Creative Writer, Tutor, Product Strategist,
   Security Reviewer, or write your own custom instructions
 - 🔑 **Bring-your-own-key, zero lock-in** — pluggable provider layer supporting NVIDIA NIM, Gemini,
   OpenRouter, Groq, Cerebras, Hugging Face, Mistral, OpenAI, or local Ollama; keys can be set via
   `.env` **or** typed directly into the Settings UI in the app
-- 🛠️ **Real tool use** — live web search, URL reading, a sandboxed Python execution tool, file
-  read/write, image generation, `.md`/`.py` document export, and one-click `.zip` packaging of
-  everything an agent run produced
+- 🛡️ **Production-grade backend** — structured JSON logging with request correlation ids, optional
+  API-key auth, per-route rate limiting, and a real pytest suite wired into CI
+- 🛠️ **Real tool use** — live web search, URL reading, sandboxed code execution, file read/write,
+  image generation, `.md`/`.py` document export, and one-click `.zip` packaging of everything an
+  agent run produced
 - 🌐 **Web app** — React + TypeScript + **Three.js** (animated 3D "Meiko orb" avatar) + **anime.js**
-  micro-interactions, streaming chat with live tool-trace visualization
+  micro-interactions, streaming chat with live plan checklists, tool traces, and citation chips
 - 📱 **Android/iOS app** — Flutter, same visual language, native animated orb, built automatically
   into an APK by GitHub Actions on every push
-- 🤖 **Telegram bot** — modern Bot API 7+ features: inline keyboards for modes/personas, live
-  streaming message edits, photo/document upload, optional Web App launch button
+- 🤖 **Telegram bot** — modern Bot API 7+ features: inline keyboards for modes/personas/providers/
+  connectors, message reactions, `/stop` to cancel mid-generation, live streaming edits with plan +
+  citation rendering, conversation history browser, `/github` for repo write access, `/usage` stats,
+  photo/document upload, optional Web App launch button, and optional user allow-listing
 - 🧑‍💻 **CLI** — talk to Meiko, switch modes, manage keys, and download generated files from the
   terminal
 - ⚙️ **CI/CD** — GitHub Actions build/test every component, and automatically build signed/unsigned
   Android APKs plus a full release bundle zip
+- 🚀 **One-click free public deploy** — see [DEPLOY.md](./DEPLOY.md) for a ~5 minute path to a real
+  public URL (Render + Vercel free tiers, no credit card) plus custom-domain instructions
 
 ## 📁 Project layout
+
 
 ```
 meiko/
@@ -128,8 +149,18 @@ To get properly signed release APKs instead of debug-signed ones, add these repo
 ## 🔌 Adding a new connector
 
 Drop a JSON manifest into `backend/plugins/your_connector.json` describing the API's base URL,
-auth, and actions (see `backend/plugins/github.json` for a full example) — no Python code required.
-Meiko will pick it up automatically and expose it as a tool the agent can call.
+auth, and actions (see `backend/plugins/wikipedia.json` for a full example) — no Python code
+required. Meiko will pick it up automatically and expose it as a tool the agent can call. For
+connectors needing real logic (multi-step writes, computed payloads — like the built-in GitHub
+read/write tools), add a small Python module under `backend/app/tools/` instead and register it in
+`backend/app/harness/agent.py::build_default_registry`.
+
+## 🧩 Adding a new Skill
+
+Create `backend/skills/your-skill/SKILL.md` with YAML frontmatter (`name`, `description`,
+`triggers`) followed by markdown instructions/playbook content — see `backend/skills/pdf-report/` for
+a template. Meiko discovers skills automatically and exposes `list_skills`/`use_skill` tools so the
+agent can load the full instructions only when a task actually needs them.
 
 ## 🎭 Agent Modes
 

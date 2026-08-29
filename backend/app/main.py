@@ -44,6 +44,7 @@ from .core.config import get_settings
 from .core.logging import get_logger, new_request_id, request_id_ctx, setup_logging
 from .core.modes import list_modes
 from .core.personas import get_persona, list_personas
+from .tools.skills import discover_skills
 from .core.security import enforce_chat_rate_limit, enforce_general_rate_limit, require_api_key
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
@@ -139,6 +140,14 @@ async def get_personas():
     return [
         {"id": p.id, "name": p.name, "tagline": p.tagline}
         for p in list_personas()
+    ]
+
+
+@app.get("/api/skills")
+async def get_skills():
+    return [
+        {"id": s.id, "name": s.name, "description": s.description, "triggers": s.triggers}
+        for s in discover_skills()
     ]
 
 

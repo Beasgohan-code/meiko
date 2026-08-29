@@ -23,7 +23,9 @@ class MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                if (!isUser && message.plan.isNotEmpty) _PlanChecklist(plan: message.plan),
                 if (!isUser && message.tools.isNotEmpty) _ToolTrace(tools: message.tools),
+                if (!isUser && message.providerNotices.isNotEmpty) _ProviderNotices(notices: message.providerNotices),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
@@ -70,6 +72,7 @@ class MessageBubble extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text('⚠ ${message.error}', style: const TextStyle(color: MeikoColors.danger, fontSize: 12.5)),
                   ),
+                if (!isUser && message.citations.isNotEmpty) _Citations(citations: message.citations),
               ],
             ),
           ),
@@ -154,6 +157,140 @@ class _ToolTrace extends StatelessWidget {
                       ],
                     ],
                   ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _PlanChecklist extends StatelessWidget {
+  final List<PlanTask> plan;
+  const _PlanChecklist({required this.plan});
+
+  @override
+  Widget build(BuildContext context) {
+    final done = plan.where((t) => t.status == PlanTaskStatus.done).length;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: const BoxConstraints(minWidth: 220),
+      decoration: BoxDecoration(
+        color: MeikoColors.violet.withOpacity(0.06),
+        border: Border.all(color: MeikoColors.violet.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'PLAN · $done/${plan.length} DONE',
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: MeikoColors.violetSoft),
+          ),
+          const SizedBox(height: 4),
+          ...plan.map((t) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      t.status == PlanTaskStatus.done
+                          ? Icons.check_circle
+                          : t.status == PlanTaskStatus.inProgress
+                              ? Icons.autorenew
+                              : Icons.circle_outlined,
+                      size: 13,
+                      color: t.status == PlanTaskStatus.done
+                          ? MeikoColors.success
+                          : t.status == PlanTaskStatus.inProgress
+                              ? MeikoColors.violetSoft
+                              : MeikoColors.text2,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        t.text,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: t.status == PlanTaskStatus.done ? MeikoColors.text2 : MeikoColors.text1,
+                          decoration: t.status == PlanTaskStatus.done ? TextDecoration.lineThrough : null,
+                          fontWeight: t.status == PlanTaskStatus.inProgress ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderNotices extends StatelessWidget {
+  final List<String> notices;
+  const _ProviderNotices({required this.notices});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: notices
+            .map((n) => Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AFBBF24),
+                    border: Border.all(color: const Color(0x40FBBF24)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.swap_horiz, size: 12, color: Color(0xFFFBBF24)),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text(n, style: const TextStyle(fontSize: 11.5, color: Color(0xFFFBBF24)))),
+                    ],
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _Citations extends StatelessWidget {
+  final List<Citation> citations;
+  const _Citations({required this.citations});
+
+  String _hostname(String url) {
+    try {
+      return Uri.parse(url).host.replaceFirst('www.', '');
+    } catch (_) {
+      return url;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: citations
+            .map((c) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: MeikoColors.cyan.withOpacity(0.08),
+                    border: Border.all(color: MeikoColors.cyan.withOpacity(0.2)),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(_hostname(c.url), style: const TextStyle(fontSize: 11.5, color: MeikoColors.cyan)),
                 ))
             .toList(),
       ),

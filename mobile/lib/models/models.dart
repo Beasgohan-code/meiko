@@ -110,6 +110,66 @@ class ToolTrace {
   ToolTrace({required this.id, required this.name, this.result, this.status = ToolStatus.calling});
 }
 
+enum PlanTaskStatus { pending, inProgress, done }
+
+class PlanTask {
+  final String text;
+  final PlanTaskStatus status;
+
+  PlanTask({required this.text, required this.status});
+
+  factory PlanTask.fromJson(Map<String, dynamic> json) {
+    final raw = json['status'] as String? ?? 'pending';
+    final status = raw == 'done'
+        ? PlanTaskStatus.done
+        : raw == 'in_progress'
+            ? PlanTaskStatus.inProgress
+            : PlanTaskStatus.pending;
+    return PlanTask(text: json['text'] as String? ?? '', status: status);
+  }
+}
+
+class Citation {
+  final String url;
+  final String via;
+  Citation({required this.url, required this.via});
+
+  factory Citation.fromJson(Map<String, dynamic> json) =>
+      Citation(url: json['url'] as String? ?? '', via: json['via'] as String? ?? '');
+}
+
+class SkillMeta {
+  final String id;
+  final String name;
+  final String description;
+  final List<String> triggers;
+
+  SkillMeta({required this.id, required this.name, required this.description, required this.triggers});
+
+  factory SkillMeta.fromJson(Map<String, dynamic> json) => SkillMeta(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String? ?? '',
+        triggers: (json['triggers'] as List? ?? []).map((e) => e.toString()).toList(),
+      );
+}
+
+class ConversationSummary {
+  final String id;
+  final String title;
+  final bool pinned;
+  final double updatedAt;
+
+  ConversationSummary({required this.id, required this.title, required this.pinned, required this.updatedAt});
+
+  factory ConversationSummary.fromJson(Map<String, dynamic> json) => ConversationSummary(
+        id: json['id'] as String,
+        title: (json['title'] as String?)?.isNotEmpty == true ? json['title'] as String : 'Untitled',
+        pinned: (json['pinned'] as int? ?? 0) == 1,
+        updatedAt: (json['updated_at'] as num?)?.toDouble() ?? 0,
+      );
+}
+
 enum ChatRole { user, assistant }
 
 class ChatMessage {
@@ -119,6 +179,9 @@ class ChatMessage {
   final List<ToolTrace> tools;
   bool streaming;
   String? error;
+  List<PlanTask> plan;
+  List<Citation> citations;
+  List<String> providerNotices;
 
   ChatMessage({
     required this.id,
@@ -127,5 +190,11 @@ class ChatMessage {
     List<ToolTrace>? tools,
     this.streaming = false,
     this.error,
-  }) : tools = tools ?? [];
+    List<PlanTask>? plan,
+    List<Citation>? citations,
+    List<String>? providerNotices,
+  })  : tools = tools ?? [],
+        plan = plan ?? [],
+        citations = citations ?? [],
+        providerNotices = providerNotices ?? [];
 }

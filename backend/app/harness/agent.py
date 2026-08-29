@@ -22,6 +22,7 @@ Advanced features:
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -34,14 +35,17 @@ from ..plugins.manager import get_connector_manager
 from ..providers.base import ChatMessage, ProviderError
 from ..providers.registry import build_provider, fallback_chain
 from ..tools.base import ToolRegistry
+from ..tools.bash_runner import BashRunTool
 from ..tools.calculator import CalculatorTool
 from ..tools.code_exec import RunPythonTool
 from ..tools.documents import MakeDocumentTool, MakeZipTool
 from ..tools.fetch_url import FetchUrlTool
 from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
+from ..tools.github_tools import build_github_tools
 from ..tools.image_gen import GenerateImageTool
 from ..tools.memory_tool import RecallTool, RememberTool
 from ..tools.planning import PlanState, UpdatePlanTool
+from ..tools.skills import SkillsInvokeTool, SkillsListTool
 from ..tools.web_search import WebSearchTool
 
 logger = get_logger("meiko.harness")
@@ -68,6 +72,10 @@ Guidelines:
 - Use remember to save durable facts about the user across sessions, and recall_memories to check
   what you already know about them at the start of a new task if relevant.
 - Use any connector/plugin tools (e.g. GitHub, Wikipedia, weather) when they are the best source of truth.
+- Use run_bash for shell/CLI needs (git, installing a small package, running scripts, checking tool
+  versions) that write_file/run_python don't directly cover. It's sandboxed to your session workspace.
+- Call list_skills when a request sounds like it matches a specialized playbook (e.g. PDF reports, web app
+  scaffolding, competitive research), then use_skill to load the full instructions before proceeding.
 - Be concise but thorough. Use markdown formatting (headings, code blocks, lists) when helpful.
 - If a tool fails, explain what happened and try a reasonable alternative instead of giving up silently.
 - You have a warm, upbeat, slightly playful personality, but you are always precise and honest.
@@ -96,6 +104,16 @@ def build_default_registry(
     registry.register(RememberTool(lambda: user_id))
     registry.register(RecallTool(lambda: user_id))
     registry.register(UpdatePlanTool(plan_state or PlanState()))
+    registry.register(BashRunTool(lambda: session_id))
+    registry.register(SkillsListTool())
+    registry.register(SkillsInvokeTool())
+
+    def _github_token() -> Optional[str]:
+        secrets = connector_secrets or {}
+        return secrets.get("github") or os.environ.get("GITHUB_TOKEN")
+
+    for tool in build_github_tools(_github_token):
+        registry.register(tool)
 
     # Merge in dynamic connectors/plugins (GitHub, Wikipedia, weather, custom...)
     try:

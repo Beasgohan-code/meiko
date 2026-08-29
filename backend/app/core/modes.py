@@ -40,7 +40,7 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Research",
         description="Deep web research mode: searches, reads sources, and synthesizes a cited answer.",
         icon="search",
-        tools={"web_search", "fetch_url", "calculator", "remember", "recall_memories", "update_plan"},
+        tools={"web_search", "fetch_url", "calculator", "remember", "recall_memories", "update_plan", "list_skills", "use_skill"},
         max_steps=10,
         temperature=0.4,
         system_suffix=(
@@ -54,15 +54,21 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Code",
         description="Software engineering mode: writes, runs, and debugs code in a sandboxed workspace.",
         icon="code",
-        tools={"write_file", "read_file", "list_files", "run_python", "calculator", "web_search", "fetch_url", "make_zip", "remember", "recall_memories", "update_plan"},
+        tools={
+            "write_file", "read_file", "list_files", "run_python", "run_bash", "calculator", "web_search",
+            "fetch_url", "make_zip", "remember", "recall_memories", "update_plan", "list_skills", "use_skill",
+            "github_search_repos", "github_list_files", "github_read_file", "github_write_file",
+            "github_create_issue", "github_create_pull_request", "github_list_issues",
+        },
         max_steps=14,
         temperature=0.2,
         system_suffix=(
             "Mode: CODE. You are acting as a coding agent, similar to Claude Code / DeepSeek Coder harnesses. "
             "Write clean, correct, well-commented code. Use write_file to persist files into the sandboxed "
-            "workspace, run_python to execute and test Python code, and list_files/read_file to inspect the "
-            "current project. When you finish a multi-file task, mention that the user can export the workspace "
-            "as a zip with make_zip."
+            "workspace, run_python/run_bash to execute and test code, and list_files/read_file to inspect the "
+            "current project. Use the github_* tools when the user wants to read from or commit changes to a "
+            "real GitHub repository. When you finish a multi-file task, mention that the user can export the "
+            "workspace as a zip with make_zip."
         ),
     ),
     "autonomous": AgentMode(
@@ -85,7 +91,7 @@ AGENT_MODES: dict[str, AgentMode] = {
         name="Creative",
         description="Image generation & creative writing mode.",
         icon="image",
-        tools={"generate_image", "make_document", "remember", "recall_memories", "update_plan"},
+        tools={"generate_image", "make_document", "remember", "recall_memories", "update_plan", "list_skills", "use_skill"},
         max_steps=6,
         temperature=0.95,
         system_suffix=(

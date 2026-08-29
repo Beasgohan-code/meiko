@@ -1,0 +1,52 @@
+\
+# Render.com Blueprint — one-click free deploy for the Meiko backend.
+# Usage: https://render.com/deploy?repo=https://github.com/Beasgohan-code/meiko
+# Render auto-detects this file and provisions the service below on the free tier.
+services:
+  - type: web
+    name: meiko-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: Meiko
+      - key: ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: DEFAULT_PROVIDER
+        value: nvidia
+      - key: DEFAULT_MODEL
+        value: mistralai/mistral-nemotron
+      - key: DATA_DIR
+        value: /app/data
+      - key: DB_PATH
+        value: /app/data/meiko.db
+      - key: MAX_AGENT_STEPS
+        value: "20"
+      - key: RATE_LIMIT_CHAT_PER_MIN
+        value: "20"
+      - key: RATE_LIMIT_GENERAL_PER_MIN
+        value: "120"
+      - key: LOG_LEVEL
+        value: INFO
+      # Add your own free API keys here after deploying (Render dashboard → Environment),
+      # or leave blank and let users paste their own keys in the app's Settings UI:
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: MEIKO_API_KEY
+        sync: false
+    disk:
+      name: meiko-data
+      mountPath: /app/data
+      sizeGB: 1
