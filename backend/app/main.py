@@ -26,6 +26,7 @@ core/security.py.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import mimetypes
 import re
@@ -36,7 +37,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.schemas import (
@@ -48,8 +49,10 @@ from .api.schemas import (
     PairingClaimRequest,
     PairingCreateRequest,
     RenameConversationRequest,
+    RunStartRequest,
     SettingsUpdateRequest,
     SkillCreateRequest,
+    ToolGenerateRequest,
 )
 from .core.config import get_settings
 from .core.logging import get_logger, new_request_id, request_id_ctx, setup_logging
@@ -64,12 +67,20 @@ from .core.security import (
 )
 from .core.sync import get_pairing_registry, get_sync_hub
 from .core import auth as auth_core
+from .core.run_console import get_run_manager
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
 from .plugins.manager import get_connector_manager
 from .providers.base import ChatMessage
 from .providers.registry import list_provider_meta
 from .providers.model_catalog import list_models
+from .tools.custom_tools import (
+    CustomToolValidationError,
+    delete_custom_tool,
+    list_custom_tool_specs,
+    save_custom_tool,
+    validate_spec,
+)
 
 settings = get_settings()
 setup_logging(settings.LOG_LEVEL)
@@ -385,6 +396,143 @@ async def delete_skill_route(skill_id: str):
     return {"status": "deleted", "id": skill_id}
 
 
+# ---------------- Dev Console (arena.ai/menus.ai-style live command runner) ----------------
+@app.post("/api/console/run", dependencies=[Depends(require_api_key)])
+async def console_run(payload: RunStartRequest):
+    """Starts a bash or python run in the caller's sandboxed session
+    workspace and returns immediately with a run_id — the run keeps
+    executing and streaming output into an in-memory buffer that
+    /api/console/{run_id}/output (poll) or /ws/console/{run_id} (push)
+    can read from, so a UI can show a real live terminal instead of
+    waiting for one final blob like the agent's own run_bash/run_python
+    tools do."""
+    manager = get_run_manager()
+    try:
+        run = await manager.start(
+            payload.session_id, payload.command, kind=payload.kind, timeout_seconds=payload.timeout_seconds
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return run.to_summary()
+
+
+@app.get("/api/console/{run_id}/output", dependencies=[Depends(require_api_key)])
+async def console_output(
+    run_id: str,
+    since: int = Query(0, ge=0),
+    wait_for: Optional[str] = Query(default=None, pattern="^(exit|log)$"),
+    wait_pattern: Optional[str] = Query(default=None),
+    wait_timeout: float = Query(default=20.0, ge=0.1, le=120.0),
+):
+    """Poll for new output since a byte cursor — same 'give me what's new'
+    shape as this project's own get_process_output sandbox tool, including
+    optional short blocking waits (wait_for=exit|log) so a UI doesn't need
+    to tight-poll for a fast command."""
+    manager = get_run_manager()
+    try:
+        return await manager.get_output(
+            run_id, since=since, wait_for=wait_for, wait_pattern=wait_pattern, wait_timeout=wait_timeout
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown run_id")
+
+
+@app.get("/api/console/{session_id}/runs", dependencies=[Depends(require_api_key)])
+async def console_list_runs(session_id: str):
+    manager = get_run_manager()
+    return [r.to_summary() for r in manager.list_for_session(session_id)]
+
+
+@app.post("/api/console/{run_id}/stop", dependencies=[Depends(require_api_key)])
+async def console_stop(run_id: str):
+    manager = get_run_manager()
+    stopped = await manager.stop(run_id)
+    if not stopped:
+        raise HTTPException(status_code=404, detail="Run not found or already finished")
+    return {"status": "stopped", "run_id": run_id}
+
+
+@app.websocket("/ws/console/{run_id}")
+async def console_websocket(websocket: WebSocket, run_id: str):
+    """Live push channel for a single run: sends every new output chunk the
+    instant it's produced, for a real-time terminal feel (menus.ai/arena.ai
+    style), then a final {"event":"exit", ...} message when the process
+    ends. Falls back gracefully to the polling endpoint above if a client
+    can't use WebSockets."""
+    manager = get_run_manager()
+    run = manager.get(run_id)
+    if not run:
+        await websocket.close(code=4404)
+        return
+    await websocket.accept()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+
+    # Replay everything buffered so far, then subscribe for new chunks.
+    existing_text, cursor = run.slice_since(0)
+    if existing_text:
+        await websocket.send_json({"event": "output", "text": existing_text, "cursor": cursor})
+    if run.status != "running":
+        await websocket.send_json({"event": "exit", **run.to_summary()})
+        await websocket.close()
+        return
+
+    run.subscribers.add(queue)
+    try:
+        while True:
+            chunk = await queue.get()
+            if chunk is None:  # sentinel: process finished
+                await websocket.send_json({"event": "exit", **run.to_summary()})
+                break
+            text, cursor = run.slice_since(run.total_len() - len(chunk))
+            await websocket.send_json({"event": "output", "text": chunk.decode(errors="replace"), "cursor": run.total_len()})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        run.subscribers.discard(queue)
+
+
+# ---------------- Tools Generator (dev-mode: describe a tool, get a real one) ----------------
+@app.post("/api/tools/generate", dependencies=[Depends(require_api_key)])
+async def generate_tool(payload: ToolGenerateRequest):
+    """Turns a plain-language tool description into a real, callable Tool
+    the agent can invoke on its very next turn — no server restart, no
+    code deploy. See tools/custom_tools.py for the two supported shapes
+    (HTTP-templated, or a short sandboxed Python body)."""
+    try:
+        spec = validate_spec(
+            name=payload.name,
+            description=payload.description,
+            parameters=payload.parameters,
+            kind=payload.kind,
+            http_method=payload.http_method or "GET",
+            http_url_template=payload.http_url_template,
+            http_headers=payload.http_headers,
+            python_body=payload.python_body,
+        )
+    except CustomToolValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    save_custom_tool(spec)
+    return spec.to_dict()
+
+
+@app.get("/api/tools/generated", dependencies=[Depends(require_api_key)])
+async def list_generated_tools():
+    return [s.to_dict() for s in list_custom_tool_specs()]
+
+
+@app.delete("/api/tools/generated/{name}", dependencies=[Depends(require_api_key)])
+async def delete_generated_tool(name: str):
+    try:
+        deleted = delete_custom_tool(name)
+    except CustomToolValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No custom tool named '{name}'")
+    return {"status": "deleted", "name": name}
+
+
 # ---------------- Settings ----------------
 @app.get("/api/settings", dependencies=[Depends(require_api_key)])
 async def get_settings_route(user_id: str = Query("default")):
@@ -405,6 +553,7 @@ async def update_settings_route(payload: SettingsUpdateRequest):
     await store.set_user_settings(
         payload.user_id, provider=payload.provider, model=payload.model,
         api_keys=payload.api_keys, persona=payload.persona, ui_language=payload.ui_language,
+        custom_base_url=payload.custom_base_url,
     )
     await get_sync_hub().publish(payload.user_id, "settings_updated")
     return {"ok": True}
@@ -655,8 +804,20 @@ async def list_workspace_files(session_id: str):
                 "modified_at": stat.st_mtime,
                 "download_url": f"/api/download/{safe_session}/{p.name}",
             }
-            if kind == "workspace" and p.suffix.lower() in (".html", ".htm"):
+            ext = p.suffix.lower()
+            if kind == "workspace" and ext in (".html", ".htm"):
+                # Live-rendered preview — the vibe-coding payoff (real page in an iframe).
                 entry["preview_url"] = f"/api/preview/{safe_session}/{rel.as_posix()}"
+                entry["preview_kind"] = "render"
+            elif kind == "workspace" and ext in (
+                ".js", ".jsx", ".ts", ".tsx", ".css", ".json", ".md", ".txt", ".py", ".yaml", ".yml"
+            ):
+                # Generalized code preview — a shareable, syntax-highlighted
+                # read-only page for any generated source file, not just
+                # HTML (extends the Vibe Coding live-preview feature to
+                # every artifact Meiko writes).
+                entry["preview_url"] = f"/api/preview-page/{safe_session}/{rel.as_posix()}"
+                entry["preview_kind"] = "code"
             files.append(entry)
     files.sort(key=lambda f: f["modified_at"], reverse=True)
     return files
@@ -691,6 +852,55 @@ async def preview_file(session_id: str, file_path: str):
         raise HTTPException(status_code=404, detail="File not found")
     mime, _ = mimetypes.guess_type(target.name)
     return FileResponse(str(target), media_type=mime or "text/plain")
+
+
+_CODE_PREVIEW_TEMPLATE = """<!doctype html>
+<html><head><meta charset="utf-8">
+<title>{title}</title>
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d0d12; color: #e7e7ee; }}
+  header {{ display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #16161f; border-bottom: 1px solid #26263a; position: sticky; top: 0; }}
+  header .name {{ font-weight: 600; font-size: 13px; }}
+  header .badge {{ font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #7c5cff33; color: #b6a6ff; }}
+  main {{ padding: 0; }}
+  pre {{ margin: 0; padding: 20px 24px 60px; overflow-x: auto; font-size: 13px; line-height: 1.6; white-space: pre; }}
+  .line-no {{ display: inline-block; width: 3.5em; color: #55556b; user-select: none; text-align: right; margin-right: 1.2em; }}
+</style></head>
+<body>
+<header><span class="name">{title}</span><span class="badge">Meiko live preview</span></header>
+<main><pre>{content}</pre></main>
+</body></html>"""
+
+
+@app.get("/api/preview-page/{session_id}/{file_path:path}", dependencies=[Depends(require_api_key_header_or_query)])
+async def preview_page(session_id: str, file_path: str):
+    """Shareable, read-only rendered preview for any generated source file
+    (JS/TS/CSS/JSON/Markdown/Python/YAML/...), generalizing the Vibe-Coding
+    live-preview beyond just HTML: this is what a 'preview link' opens for
+    a non-HTML artifact — a real page with line numbers, not a raw-text
+    download prompt. HTML files still use /api/preview for a true rendered
+    iframe; this route is for source files meant to be *read*, not run."""
+    import html as html_module
+
+    safe_session = Path(session_id).name
+    root = (Path(settings.DATA_DIR) / "workspaces" / safe_session).resolve()
+    target = (root / file_path).resolve()
+    if not str(target).startswith(str(root)) or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    lines = text.splitlines() or [""]
+    numbered = "\n".join(
+        f'<span class="line-no">{i + 1}</span>{html_module.escape(line)}' for i, line in enumerate(lines)
+    )
+    page = _CODE_PREVIEW_TEMPLATE.format(title=html_module.escape(target.name), content=numbered)
+    return HTMLResponse(page)
 
 
 # ---------------- Chat (SSE streaming) ----------------
@@ -739,11 +949,14 @@ async def chat_stream(payload: ChatRequest):
 
     image_urls = payload.image_paths or None
 
+    base_url_override = user_settings.get("custom_base_url") if provider_id == "custom" else None
+
     agent = MeikoAgent(
         settings,
         provider_id=provider_id,
         model=model,
         api_key_override=api_key_override,
+        base_url_override=base_url_override,
         persona_extra=persona,
         mode_id=payload.mode,
         connector_secrets=api_keys,

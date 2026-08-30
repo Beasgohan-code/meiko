@@ -28,6 +28,10 @@ class SettingsUpdateRequest(BaseModel):
     api_keys: Optional[dict[str, str]] = None
     theme: Optional[str] = None
     ui_language: Optional[str] = None
+    # Base URL for the generic "custom" (any OpenAI-compatible endpoint)
+    # provider — irrelevant for every other provider id, which ship their
+    # own fixed base URLs.
+    custom_base_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class NewConversationRequest(BaseModel):
@@ -58,6 +62,29 @@ class SkillCreateRequest(BaseModel):
     triggers: list[str] = Field(default_factory=list)
     body: str = Field(..., min_length=1, max_length=50000)
     skill_id: Optional[str] = Field(default=None, max_length=100)
+
+
+class RunStartRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
+    command: str = Field(..., min_length=1, max_length=20000)
+    kind: str = Field(default="bash", pattern="^(bash|python)$")
+    timeout_seconds: int = Field(default=30, ge=1, le=300)
+
+
+class ToolGenerateRequest(BaseModel):
+    """Describes a new tool in plain terms; the backend turns it into a
+    real, registered Python Tool subclass — the 'tools generator' feature."""
+    name: str = Field(..., min_length=1, max_length=64, pattern="^[a-z][a-z0-9_]*$")
+    description: str = Field(..., min_length=1, max_length=500)
+    parameters: dict = Field(default_factory=dict)
+    kind: str = Field(default="http", pattern="^(http|python)$")
+    # kind == "http": call a REST endpoint and return the response text.
+    http_method: Optional[str] = Field(default="GET", pattern="^(GET|POST|PUT|DELETE|PATCH)$")
+    http_url_template: Optional[str] = Field(default=None, max_length=2000)
+    http_headers: Optional[dict[str, str]] = None
+    # kind == "python": run a short, sandboxed Python function body the
+    # user/agent supplies, with the tool's arguments available as locals.
+    python_body: Optional[str] = Field(default=None, max_length=20000)
 
 
 class PairingCreateRequest(BaseModel):

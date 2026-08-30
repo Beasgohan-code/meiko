@@ -85,7 +85,30 @@ export interface MemoryFact {
   created_at: number;
 }
 
-const BASE_URL = (import.meta as any).env?.VITE_BACKEND_URL || "";
+// The backend base URL, in priority order:
+//   1. VITE_BACKEND_URL baked in at build time (self-hosters/custom deploys).
+//   2. Empty string when running on localhost (Vite's dev proxy in
+//      vite.config.ts forwards /api -> the local backend).
+//   3. Otherwise fall back to Meiko's own public Render backend, so the
+//      hosted web app (e.g. the Vercel deploy) works out of the box even if
+//      whoever deployed it forgot to set VITE_BACKEND_URL — previously a
+//      missing env var here silently made every /api/* call hit Vercel's
+//      own static host, which just served index.html back (a same-origin
+//      "phantom 200" that looked like a working response but broke chat).
+const PUBLIC_FALLBACK_BACKEND = "https://meiko.onrender.com";
+function resolveBaseUrl(): string {
+  const env = (import.meta as any).env;
+  if (env?.VITE_BACKEND_URL) return env.VITE_BACKEND_URL.replace(/\/$/, "");
+  // Under `vite dev`/`vite preview` (including a sandboxed dev-server
+  // preview reached through a proxy host), always defer to the relative
+  // `/api` path so vite.config.ts's own dev proxy forwards it — only a
+  // genuine static production build (no dev server in front of it) should
+  // ever fall back to the public backend below.
+  if (env?.DEV) return "";
+  return PUBLIC_FALLBACK_BACKEND;
+}
+const BASE_URL = resolveBaseUrl();
+
 
 function headers(apiKey?: string) {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -342,6 +365,7 @@ export async function updateUserSettings(payload: {
   persona?: string;
   api_keys?: Record<string, string>;
   ui_language?: string;
+  custom_base_url?: string;
 }) {
   const res = await fetch(`${BASE_URL}/api/settings`, {
     method: "POST",
@@ -435,6 +459,7 @@ export interface WorkspaceFile {
   modified_at: number;
   download_url: string;
   preview_url?: string;
+  preview_kind?: "render" | "code";
 }
 
 export async function fetchWorkspaceFiles(sessionId: string): Promise<WorkspaceFile[]> {
@@ -464,6 +489,122 @@ export function previewUrl(sessionId: string, relativePath: string) {
   const apiKey = localStorage.getItem("meiko_api_key") || "";
   const q = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "";
   return `${BASE_URL}/api/preview/${encodeURIComponent(sessionId)}/${relativePath}${q}`;
+}
+
+/** Generalized read-only "code preview" link for any generated source file
+ * (js/ts/css/json/md/py/yaml/...), extending the Vibe Coding live-preview
+ * concept beyond just HTML. Same api_key-in-query trick as previewUrl so
+ * it works as a bare, shareable link. */
+export function codePreviewUrl(sessionId: string, relativePath: string) {
+  const apiKey = localStorage.getItem("meiko_api_key") || "";
+  const q = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "";
+  return `${BASE_URL}/api/preview-page/${encodeURIComponent(sessionId)}/${relativePath}${q}`;
+}
+
+/** Turns any of Meiko's own relative API paths (already returned by the
+ * backend, e.g. a file's preview_url) into a fully-qualified, shareable
+ * absolute URL — resolved against the current backend origin so it still
+ * works when copied outside the app (a real "share this preview" link). */
+export function absoluteUrl(relativeOrAbsolute: string): string {
+  if (/^https?:\/\//i.test(relativeOrAbsolute)) return relativeOrAbsolute;
+  const origin = BASE_URL || window.location.origin;
+  return `${origin}${relativeOrAbsolute}`;
+}
+
+// ---------------- Dev Console (arena.ai/menus.ai-style live command runner) ----------------
+export interface ConsoleRun {
+  run_id: string;
+  session_id: string;
+  command: string;
+  kind: "bash" | "python";
+  status: "running" | "exited" | "killed" | "timeout" | "error";
+  exit_code: number | null;
+  started_at: number;
+  finished_at: number | null;
+}
+
+export async function startConsoleRun(sessionId: string, command: string, kind: "bash" | "python", timeoutSeconds = 30): Promise<ConsoleRun> {
+  const res = await fetch(`${BASE_URL}/api/console/run`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ session_id: sessionId, command, kind, timeout_seconds: timeoutSeconds }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || "Failed to start run");
+  return res.json();
+}
+
+export async function stopConsoleRun(runId: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/console/${runId}/stop`, { method: "POST", headers: headers() });
+}
+
+export async function fetchConsoleRuns(sessionId: string): Promise<ConsoleRun[]> {
+  const res = await fetch(`${BASE_URL}/api/console/${encodeURIComponent(sessionId)}/runs`, { headers: headers() });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Live output socket for one run — pushes {event:"output", text, cursor}
+ * chunks the instant they're produced, then a final {event:"exit", ...}.
+ * Falls back to nothing special on failure; callers should also poll
+ * /api/console/{run_id}/output if they want a resilience net. */
+export function connectConsoleSocket(
+  runId: string,
+  onMessage: (msg: { event: "output" | "exit"; text?: string; cursor?: number; status?: string; exit_code?: number | null }) => void
+): { close: () => void } {
+  const wsBase = (BASE_URL || window.location.origin).replace(/^http/, "ws");
+  const ws = new WebSocket(`${wsBase}/ws/console/${runId}`);
+  ws.onmessage = (ev) => {
+    try {
+      onMessage(JSON.parse(ev.data));
+    } catch {
+      // ignore malformed frame
+    }
+  };
+  return { close: () => ws.close() };
+}
+
+// ---------------- Tools Generator ----------------
+export interface GeneratedTool {
+  name: string;
+  description: string;
+  parameters: any;
+  kind: "http" | "python";
+  http_method?: string;
+  http_url_template?: string;
+  http_headers?: Record<string, string>;
+  python_body?: string;
+  created_at: number;
+}
+
+export interface GeneratedToolDraft {
+  name: string;
+  description: string;
+  parameters?: any;
+  kind: "http" | "python";
+  http_method?: string;
+  http_url_template?: string;
+  http_headers?: Record<string, string>;
+  python_body?: string;
+}
+
+export async function generateTool(draft: GeneratedToolDraft): Promise<GeneratedTool> {
+  const res = await fetch(`${BASE_URL}/api/tools/generate`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(draft),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || "Failed to generate tool");
+  return res.json();
+}
+
+export async function fetchGeneratedTools(): Promise<GeneratedTool[]> {
+  const res = await fetch(`${BASE_URL}/api/tools/generated`, { headers: headers() });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function deleteGeneratedTool(name: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/tools/generated/${encodeURIComponent(name)}`, { method: "DELETE", headers: headers() });
 }
 
 export interface ChatStreamParams {

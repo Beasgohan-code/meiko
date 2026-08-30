@@ -38,6 +38,7 @@ from ..tools.base import ToolRegistry
 from ..tools.bash_runner import BashRunTool
 from ..tools.calculator import CalculatorTool
 from ..tools.code_exec import RunPythonTool
+from ..tools.custom_tools import build_custom_tools
 from ..tools.documents import MakeDocumentTool, MakeZipTool
 from ..tools.fetch_url import FetchUrlTool
 from ..tools.files import ListFilesTool, ReadFileTool, WriteFileTool
@@ -122,6 +123,16 @@ def build_default_registry(
             registry.register(tool)
     except Exception as e:  # noqa: BLE001
         logger.warning("connector load failed: %s", e)
+
+    # Merge in user-generated custom tools (see tools/custom_tools.py —
+    # the "tools generator" dev-mode feature: HTTP-templated or sandboxed
+    # Python-body tools built from a plain-language description, no
+    # server restart or code deploy required).
+    try:
+        for tool in build_custom_tools(lambda: session_id):
+            registry.register(tool)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("custom tool load failed: %s", e)
 
     return registry
 

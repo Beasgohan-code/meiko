@@ -108,7 +108,7 @@ async def test_preview_serves_generated_html_inline(app_client):
     assert resp.headers["content-type"].startswith("text/html")
 
 
-async def test_preview_lists_preview_url_for_html_only(app_client):
+async def test_preview_lists_preview_url_for_html_and_code(app_client):
     from app import main as main_module
 
     data_dir = Path(main_module.settings.DATA_DIR)
@@ -117,13 +117,63 @@ async def test_preview_lists_preview_url_for_html_only(app_client):
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "index.html").write_text("<html></html>", encoding="utf-8")
     (ws / "notes.md").write_text("# notes", encoding="utf-8")
+    (ws / "archive.zip").write_bytes(b"PK\x03\x04")
 
     resp = await app_client.get(f"/api/workspace/{session_id}/files")
     files = {f["name"]: f for f in resp.json()}
     assert files["index.html"]["preview_url"] == f"/api/preview/{session_id}/index.html"
-    assert "preview_url" not in files["notes.md"]
+    assert files["index.html"]["preview_kind"] == "render"
+    # Non-HTML source files get a generalized read-only "code preview" link
+    # (extends the Vibe Coding live-preview feature to every artifact type).
+    assert files["notes.md"]["preview_url"] == f"/api/preview-page/{session_id}/notes.md"
+    assert files["notes.md"]["preview_kind"] == "code"
+    # Binary/non-source files (zip) get no preview link at all.
+    assert "preview_url" not in files["archive.zip"]
 
 
 async def test_preview_rejects_path_traversal(app_client):
     resp = await app_client.get("/api/preview/some-session/..%2F..%2Fetc%2Fpasswd")
+    assert resp.status_code == 404
+
+
+# ---------------- Generalized code preview links (Phase 10) ----------------
+async def test_preview_page_renders_source_file_with_line_numbers(app_client):
+    from app import main as main_module
+
+    data_dir = Path(main_module.settings.DATA_DIR)
+    session_id = "code-preview-session"
+    ws = data_dir / "workspaces" / session_id
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "app.ts").write_text("const x: number = 1;\nconsole.log(x);\n", encoding="utf-8")
+
+    resp = await app_client.get(f"/api/preview-page/{session_id}/app.ts")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "const x: number = 1;" in resp.text
+    assert "console.log(x);" in resp.text
+    assert "app.ts" in resp.text
+
+
+async def test_preview_page_escapes_html_special_chars(app_client):
+    from app import main as main_module
+
+    data_dir = Path(main_module.settings.DATA_DIR)
+    session_id = "code-preview-escape-session"
+    ws = data_dir / "workspaces" / session_id
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "snippet.js").write_text("if (a < b && c > d) {}\n", encoding="utf-8")
+
+    resp = await app_client.get(f"/api/preview-page/{session_id}/snippet.js")
+    assert resp.status_code == 200
+    assert "&lt;" in resp.text and "&gt;" in resp.text
+    assert "<script>" not in resp.text.split("<pre>", 1)[1]  # no raw unescaped tag injected
+
+
+async def test_preview_page_404_for_missing_file(app_client):
+    resp = await app_client.get("/api/preview-page/some-session/does-not-exist.py")
+    assert resp.status_code == 404
+
+
+async def test_preview_page_rejects_path_traversal(app_client):
+    resp = await app_client.get("/api/preview-page/some-session/..%2F..%2Fetc%2Fpasswd")
     assert resp.status_code == 404

@@ -178,6 +178,20 @@ PROVIDER_CATALOG: list[ProviderMeta] = [
         key_help_url="https://dashboard.cohere.com/api-keys",
         description="Cohere's free trial-key tier via their OpenAI-compatible endpoint (Command R family).",
     ),
+    ProviderMeta(
+        id="custom",
+        display_name="Custom (OpenAI-compatible)",
+        default_base_url="",
+        default_model="",
+        requires_key=True,
+        free_tier=False,
+        key_help_url="",
+        description=(
+            "Bring your own OpenAI-compatible endpoint: paste any base URL + API key "
+            "(Anthropic-via-proxy, a self-hosted vLLM/LiteLLM/text-generation-inference "
+            "server, a corporate gateway, or any other provider not listed above)."
+        ),
+    ),
 ]
 
 _CATALOG_BY_ID = {p.id: p for p in PROVIDER_CATALOG}
@@ -204,6 +218,7 @@ _FALLBACK_CHAINS: dict[str, list[str]] = {
     pid: [p for p in _ALL_FALLBACKS if p != pid] for pid, _ in [(p.id, p) for p in PROVIDER_CATALOG]
 }
 _FALLBACK_CHAINS["ollama"] = []  # local is already the last resort; no further fallback
+_FALLBACK_CHAINS["custom"] = []  # user-specific arbitrary endpoint; never auto-tried for others
 
 
 def fallback_chain(provider_id: str) -> list[str]:
@@ -262,6 +277,18 @@ def build_provider(
     api_key = override_api_key or env_key_map.get(provider_id)
     base_url = override_base_url or env_base_map.get(provider_id) or meta.default_base_url
     model = override_model or (settings.DEFAULT_MODEL if provider_id == settings.DEFAULT_PROVIDER else meta.default_model)
+
+    if provider_id == "custom":
+        # The generic "custom" provider has no defaults at all — it exists
+        # purely so users can point Meiko at any OpenAI-compatible endpoint
+        # (a self-hosted server, a corporate gateway, or a direct
+        # Anthropic-compatible proxy) without us hardcoding that vendor.
+        if not base_url:
+            raise ValueError(
+                "Custom provider requires a base_url (e.g. https://api.your-endpoint.com/v1)."
+            )
+        if not model:
+            raise ValueError("Custom provider requires a model name.")
 
     # Cloudflare Workers AI bakes the account id into the URL path. Since the
     # Settings UI only has one "API key" field per provider, we accept the

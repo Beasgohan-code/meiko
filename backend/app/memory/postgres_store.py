@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     api_keys TEXT DEFAULT '{}',
     persona TEXT DEFAULT '',
     ui_language TEXT DEFAULT 'en',
+    custom_base_url TEXT DEFAULT '',
     updated_at DOUBLE PRECISION
 );
 
@@ -140,6 +141,7 @@ class PostgresStore:
             ("conversations", "pinned", "INTEGER DEFAULT 0"),
             ("conversations", "mode", "TEXT DEFAULT 'autonomous'"),
             ("user_settings", "ui_language", "TEXT DEFAULT 'en'"),
+            ("user_settings", "custom_base_url", "TEXT DEFAULT ''"),
         ]
         for table, column, coltype in migrations:
             try:
@@ -285,10 +287,14 @@ class PostgresStore:
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM user_settings WHERE user_id = $1", user_id)
             if not row:
-                return {"user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {}, "persona": "", "ui_language": "en"}
+                return {
+                    "user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {},
+                    "persona": "", "ui_language": "en", "custom_base_url": "",
+                }
             d = dict(row)
             d["api_keys"] = json.loads(d.get("api_keys") or "{}")
             d.setdefault("ui_language", "en")
+            d.setdefault("custom_base_url", "")
             return d
 
     async def set_user_settings(
@@ -299,6 +305,7 @@ class PostgresStore:
         api_keys: Optional[dict[str, str]] = None,
         persona: Optional[str] = None,
         ui_language: Optional[str] = None,
+        custom_base_url: Optional[str] = None,
     ) -> None:
         current = await self.get_user_settings(user_id)
         merged_keys = current["api_keys"]
@@ -308,14 +315,15 @@ class PostgresStore:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, ui_language, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, ui_language, custom_base_url, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (user_id) DO UPDATE SET
                     provider = EXCLUDED.provider,
                     model = EXCLUDED.model,
                     api_keys = EXCLUDED.api_keys,
                     persona = EXCLUDED.persona,
                     ui_language = EXCLUDED.ui_language,
+                    custom_base_url = EXCLUDED.custom_base_url,
                     updated_at = EXCLUDED.updated_at
                 """,
                 user_id,
@@ -324,6 +332,7 @@ class PostgresStore:
                 json.dumps(merged_keys),
                 persona if persona is not None else current["persona"],
                 ui_language if ui_language is not None else current.get("ui_language", "en"),
+                custom_base_url if custom_base_url is not None else current.get("custom_base_url", ""),
                 time.time(),
             )
 

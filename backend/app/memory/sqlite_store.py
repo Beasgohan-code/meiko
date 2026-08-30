@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     model TEXT DEFAULT '',
     api_keys TEXT DEFAULT '{}',
     persona TEXT DEFAULT '',
+    custom_base_url TEXT DEFAULT '',
     updated_at REAL
 );
 
@@ -127,6 +128,7 @@ class SQLiteStore:
             ("conversations", "pinned", "INTEGER DEFAULT 0"),
             ("conversations", "mode", "TEXT DEFAULT 'autonomous'"),
             ("user_settings", "ui_language", "TEXT DEFAULT 'en'"),
+            ("user_settings", "custom_base_url", "TEXT DEFAULT ''"),
             ("memories", "embedding", "TEXT"),
         ]
         for table, column, coltype in migrations:
@@ -271,10 +273,14 @@ class SQLiteStore:
             cur = await db.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
             row = await cur.fetchone()
             if not row:
-                return {"user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {}, "persona": "", "ui_language": "en"}
+                return {
+                    "user_id": user_id, "provider": "nvidia", "model": "", "api_keys": {},
+                    "persona": "", "ui_language": "en", "custom_base_url": "",
+                }
             d = dict(row)
             d["api_keys"] = json.loads(d.get("api_keys") or "{}")
             d.setdefault("ui_language", "en")
+            d.setdefault("custom_base_url", "")
             return d
 
     async def set_user_settings(
@@ -285,6 +291,7 @@ class SQLiteStore:
         api_keys: Optional[dict[str, str]] = None,
         persona: Optional[str] = None,
         ui_language: Optional[str] = None,
+        custom_base_url: Optional[str] = None,
     ) -> None:
         current = await self.get_user_settings(user_id)
         merged_keys = current["api_keys"]
@@ -293,14 +300,15 @@ class SQLiteStore:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
                 """
-                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, ui_language, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO user_settings (user_id, provider, model, api_keys, persona, ui_language, custom_base_url, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     provider = excluded.provider,
                     model = excluded.model,
                     api_keys = excluded.api_keys,
                     persona = excluded.persona,
                     ui_language = excluded.ui_language,
+                    custom_base_url = excluded.custom_base_url,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -310,6 +318,7 @@ class SQLiteStore:
                     json.dumps(merged_keys),
                     persona if persona is not None else current["persona"],
                     ui_language if ui_language is not None else current.get("ui_language", "en"),
+                    custom_base_url if custom_base_url is not None else current.get("custom_base_url", ""),
                     time.time(),
                 ),
             )

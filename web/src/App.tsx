@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, Sparkles, Globe, FolderOpen, Sun, Moon, Command } from "lucide-react";
+import { Menu, Sparkles, Globe, FolderOpen, Sun, Moon, Command, TerminalSquare, Wrench } from "lucide-react";
 import MeikoOrb from "./components/MeikoOrb";
 import Sidebar from "./components/Sidebar";
 import MessageBubble from "./components/MessageBubble";
@@ -8,6 +8,8 @@ import Composer from "./components/Composer";
 import SettingsModal from "./components/SettingsModal";
 import ArtifactsPanel from "./components/ArtifactsPanel";
 import CommandPalette from "./components/CommandPalette";
+import DevConsole from "./components/DevConsole";
+import ToolsGenerator from "./components/ToolsGenerator";
 import { AgentEvent, AgentModeMeta, PersonaMeta, connectSyncSocket, fetchAuthConfig, fetchMe, fetchModes, fetchPersonas, fetchWorkspaceFiles, getConversationMessages, githubLoginUrl, streamChat, uploadFile } from "./lib/api";
 import { useMeikoStore } from "./lib/store";
 import { LogIn, LogOut } from "lucide-react";
@@ -67,6 +69,29 @@ export default function App() {
   const [artifactCount, setArtifactCount] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [orbState, setOrbState] = useState<"idle" | "thinking" | "speaking" | "tool">("idle");
+  // Hidden dev-mode surface: tap the "Meiko Agent" title 5 times in a row
+  // (within 2s of each tap) to reveal the Dev Console + Tools Generator —
+  // power-user features we don't want cluttering the default UI.
+  const [devModeUnlocked, setDevModeUnlocked] = useState(() => localStorage.getItem("meiko_dev_mode") === "1");
+  const [devConsoleOpen, setDevConsoleOpen] = useState(false);
+  const [toolsGeneratorOpen, setToolsGeneratorOpen] = useState(false);
+  const devTapCountRef = useRef(0);
+  const devTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleTitleTap = () => {
+    devTapCountRef.current += 1;
+    if (devTapTimerRef.current) clearTimeout(devTapTimerRef.current);
+    devTapTimerRef.current = setTimeout(() => {
+      devTapCountRef.current = 0;
+    }, 2000);
+    if (devTapCountRef.current >= 5) {
+      devTapCountRef.current = 0;
+      setDevModeUnlocked((prev) => {
+        const next = !prev;
+        localStorage.setItem("meiko_dev_mode", next ? "1" : "0");
+        return next;
+      });
+    }
+  };
   const { t, lang, setLang } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
@@ -354,7 +379,7 @@ export default function App() {
             <button className="composer-btn mobile-menu-btn" onClick={() => setSidebarOpen((s) => !s)}>
               <Menu size={18} />
             </button>
-            <div>
+            <div onClick={handleTitleTap} style={{ cursor: "default", userSelect: "none" }}>
               <div className="title">Meiko Agent</div>
               <div className="subtitle">
                 Mode: {modes.find((m) => m.id === mode)?.name || mode} · {provider || "auto"}
@@ -362,6 +387,28 @@ export default function App() {
             </div>
           </div>
           <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10 }}>
+            {devModeUnlocked && (
+              <>
+                <motion.button
+                  className="composer-btn"
+                  title="Dev Console — run bash/python with live output"
+                  onClick={() => setDevConsoleOpen((o) => !o)}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <TerminalSquare size={17} />
+                </motion.button>
+                <motion.button
+                  className="composer-btn"
+                  title="Tools Generator — turn a description into a real agent tool"
+                  onClick={() => setToolsGeneratorOpen((o) => !o)}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <Wrench size={17} />
+                </motion.button>
+              </>
+            )}
             <motion.button
               className="composer-btn"
               title="Quick actions (⌘K)"
@@ -513,6 +560,12 @@ export default function App() {
 
       <AnimatePresence>{settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}</AnimatePresence>
       <AnimatePresence>{artifactsOpen && <ArtifactsPanel sessionId={sessionId} onClose={() => setArtifactsOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {devConsoleOpen && <DevConsole sessionId={sessionId} onClose={() => setDevConsoleOpen(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {toolsGeneratorOpen && <ToolsGenerator onClose={() => setToolsGeneratorOpen(false)} />}
+      </AnimatePresence>
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}

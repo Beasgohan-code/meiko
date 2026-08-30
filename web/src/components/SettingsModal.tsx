@@ -83,6 +83,7 @@ export default function SettingsModal({ onClose }: Props) {
   const [activeProvider, setActiveProvider] = useState(provider || "nvidia");
   const [activeModel, setActiveModel] = useState(model || "");
   const [replyLanguage, setReplyLanguage] = useState("en");
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
   const [customPersona, setCustomPersona] = useState("");
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [githubStatus, setGithubStatus] = useState<string>("");
@@ -107,6 +108,7 @@ export default function SettingsModal({ onClose }: Props) {
       if (s.model) setActiveModel(s.model);
       if (s.persona) setCustomPersona(s.persona);
       if (s.ui_language) setReplyLanguage(s.ui_language);
+      if (s.custom_base_url) setCustomBaseUrl(s.custom_base_url);
     });
     getSyncStatus(userId).then((s) => setConnectedDevices(s.connected_devices)).catch(() => {});
   }, [userId]);
@@ -139,6 +141,7 @@ export default function SettingsModal({ onClose }: Props) {
           if (s.model) setActiveModel(s.model);
           if (s.persona) setCustomPersona(s.persona);
           if (s.ui_language) setReplyLanguage(s.ui_language);
+          if (s.custom_base_url) setCustomBaseUrl(s.custom_base_url);
         });
       } else if (msg.event === "memory_updated") {
         fetchMemories(userId).then(setMemories).catch(() => {});
@@ -178,6 +181,7 @@ export default function SettingsModal({ onClose }: Props) {
       persona: customPersona,
       api_keys: keys,
       ui_language: replyLanguage,
+      custom_base_url: activeProvider === "custom" ? customBaseUrl : undefined,
     });
     setProvider(activeProvider, activeModel || undefined);
     setSaveStatus("Saved ✓");
@@ -315,6 +319,15 @@ export default function SettingsModal({ onClose }: Props) {
                   {p.free_tier && <span className="free-badge">FREE</span>}
                 </div>
                 <div className="desc">{p.description}</div>
+                {p.id === "custom" && (
+                  <input
+                    type="text"
+                    placeholder="Base URL, e.g. https://api.your-endpoint.com/v1"
+                    value={customBaseUrl}
+                    onChange={(e) => setCustomBaseUrl(e.target.value)}
+                    style={{ marginBottom: 6 }}
+                  />
+                )}
                 {p.requires_key && (
                   <input
                     type="password"
@@ -323,14 +336,32 @@ export default function SettingsModal({ onClose }: Props) {
                     onChange={(e) => saveKey(p.id, e.target.value)}
                   />
                 )}
-                <div className="field-hint">
-                  <a href={p.key_help_url} target="_blank" rel="noreferrer">
-                    Get a free API key →
-                  </a>
-                </div>
+                {p.id === "custom" && (
+                  <input
+                    type="text"
+                    placeholder="Model name, e.g. gpt-4o or claude-3-5-sonnet-20241022"
+                    defaultValue={activeProvider === "custom" ? activeModel : ""}
+                    onChange={(e) => setActiveModel(e.target.value)}
+                    style={{ marginTop: 6 }}
+                  />
+                )}
+                {p.key_help_url && (
+                  <div className="field-hint">
+                    <a href={p.key_help_url} target="_blank" rel="noreferrer">
+                      Get a free API key →
+                    </a>
+                  </div>
+                )}
+                {p.id === "custom" && (
+                  <div className="field-hint">
+                    Works with any OpenAI-compatible /chat/completions endpoint — a self-hosted
+                    vLLM/LiteLLM/Ollama server, a corporate gateway, or a direct/proxied Anthropic-style API.
+                  </div>
+                )}
               </div>
             ))}
 
+            {activeProvider !== "custom" && (
             <div className="provider-card" style={{ marginTop: 10 }}>
               <div className="row">
                 <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -362,6 +393,7 @@ export default function SettingsModal({ onClose }: Props) {
                 {models.length === 0 && <div className="field-hint">Loading models…</div>}
               </div>
             </div>
+            )}
 
             <div className="provider-card" style={{ marginTop: 10 }}>
               <div className="row">

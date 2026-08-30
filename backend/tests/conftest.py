@@ -17,6 +17,7 @@ def isolated_data_dir(monkeypatch):
     monkeypatch.setenv("MEIKO_API_KEY", "")
     # Reset cached settings/store singletons between tests.
     from app.core import config as config_module
+    from app.core import run_console as run_console_module
     from app.core import sync as sync_module
     from app.memory import store as store_module
 
@@ -24,6 +25,7 @@ def isolated_data_dir(monkeypatch):
     store_module._store = None  # type: ignore[attr-defined]
     sync_module._pairing_registry = None  # type: ignore[attr-defined]
     sync_module._sync_hub = None  # type: ignore[attr-defined]
+    run_console_module._manager = None  # type: ignore[attr-defined]
     yield tmp
 
 

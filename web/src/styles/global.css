@@ -1086,3 +1086,116 @@ button {
 .health-dot.ok { background: var(--success, #4ade80); box-shadow: 0 0 6px var(--success, #4ade80); }
 .health-dot.bad { background: var(--danger, #ff6b6b); box-shadow: 0 0 6px var(--danger, #ff6b6b); }
 .bad-badge { background: rgba(255,107,107,0.15) !important; color: var(--danger, #ff6b6b) !important; }
+
+/* ---------- Dev Console (arena.ai/menus.ai-style live command runner) ---------- */
+.dev-console {
+  position: fixed;
+  right: 16px;
+  bottom: 92px;
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
+  z-index: 40;
+  overflow: hidden;
+}
+.dev-console-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 600; color: var(--text-0);
+}
+.dev-console-body {
+  display: flex; gap: 12px; padding: 12px 14px; overflow-y: auto;
+}
+.dev-console-editor-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dev-console-output-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dev-console-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-2); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+}
+.dev-console-editor {
+  width: 100%; resize: vertical; min-height: 100px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  background: var(--tint-03); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text-0); padding: 10px;
+}
+.dev-console-output {
+  flex: 1; min-height: 180px; max-height: 320px; overflow-y: auto;
+  margin: 0; background: #0d0d12; color: #d7d7e2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+  border-radius: 10px; padding: 10px; white-space: pre-wrap; word-break: break-word;
+  border: 1px solid var(--border);
+}
+.dev-console-kind-toggle {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px; background: var(--tint-03);
+}
+.dev-console-kind-toggle button {
+  border: none; background: transparent; color: var(--text-2);
+  font-size: 11.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center;
+}
+.dev-console-kind-toggle button.active { background: var(--violet-soft, #7c5cff); color: #fff; }
+.dev-console-history { display: flex; flex-direction: column; gap: 4px; }
+.dev-console-history-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; padding: 5px 8px; border-radius: 8px; background: var(--tint-03);
+}
+.dev-console-history-row .cmd { color: var(--text-1); font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-console-history-row .status { color: var(--text-2); flex-shrink: 0; margin-left: 8px; text-transform: uppercase; font-size: 9.5px; }
+.dev-console-history-row.status-exited .status { color: var(--success, #4ade80); }
+.dev-console-history-row.status-error .status,
+.dev-console-history-row.status-timeout .status,
+.dev-console-history-row.status-killed .status { color: var(--danger, #ff6b6b); }
+
+.run-status-pill {
+  font-size: 9.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px;
+  background: var(--tint-06); color: var(--text-2); margin-left: 4px;
+}
+.run-status-pill.status-running { background: rgba(124,92,255,0.18); color: var(--violet-soft, #7c5cff); }
+.run-status-pill.status-exited { background: rgba(74,222,128,0.15); color: var(--success, #4ade80); }
+.run-status-pill.status-error,
+.run-status-pill.status-timeout,
+.run-status-pill.status-killed { background: rgba(255,107,107,0.15); color: var(--danger, #ff6b6b); }
+
+@media (max-width: 860px) {
+  .dev-console { left: 8px; right: 8px; width: auto; bottom: 84px; }
+  .dev-console-body { flex-direction: column; }
+}
+
+/* ---------- Tools Generator (dev-mode tool scaffolder) ---------- */
+.tools-gen-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 92px;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
+  z-index: 40;
+  overflow: hidden;
+}
+.tools-gen-body { padding: 12px 14px; overflow-y: auto; }
+.tools-gen-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 8px; border-radius: 10px; background: var(--tint-03); margin-top: 6px;
+}
+.tools-gen-row-meta { display: flex; flex-direction: column; min-width: 0; }
+
+@media (max-width: 860px) {
+  .tools-gen-panel { left: 8px; right: 8px; width: auto; bottom: 84px; }
+}
