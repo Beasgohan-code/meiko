@@ -677,6 +677,29 @@ button {
   .artifacts-panel { right: 8px; left: 8px; width: auto; bottom: 84px; }
 }
 
+/* ---------- Live preview modal (vibe-coding mode) ---------- */
+.preview-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 60; padding: 24px;
+}
+.preview-modal {
+  width: min(1000px, 100%); height: min(80vh, 780px);
+  background: #fff;
+  border-radius: 14px; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  border: 1px solid var(--border);
+}
+.preview-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: rgba(16,16,28,0.95); color: var(--text-0);
+  font-size: 12.5px; font-weight: 600; flex-shrink: 0;
+}
+.preview-modal-header .icon-btn:hover { color: var(--violet-soft, #7c5cff); background: rgba(124,92,255,0.12); }
+.preview-modal-frame { flex: 1; width: 100%; border: none; background: #fff; }
+
 /* ---------- Usage / Health tabs (OmniRoute analytics/health-dashboard-inspired) ---------- */
 .usage-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .usage-stat {

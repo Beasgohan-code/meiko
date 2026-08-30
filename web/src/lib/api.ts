@@ -356,6 +356,7 @@ export interface WorkspaceFile {
   size_bytes: number;
   modified_at: number;
   download_url: string;
+  preview_url?: string;
 }
 
 export async function fetchWorkspaceFiles(sessionId: string): Promise<WorkspaceFile[]> {
@@ -376,6 +377,15 @@ export async function uploadFile(sessionId: string, file: File) {
 
 export function downloadUrl(sessionId: string, filename: string) {
   return `${BASE_URL}/api/download/${sessionId}/${filename}`;
+}
+
+/** Live-preview URL for a generated HTML artifact (vibe-coding mode) --
+ * safe to drop straight into an <iframe src>. Appends the API key (if any)
+ * as a query param since a bare <iframe> load can't attach headers. */
+export function previewUrl(sessionId: string, relativePath: string) {
+  const apiKey = localStorage.getItem("meiko_api_key") || "";
+  const q = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "";
+  return `${BASE_URL}/api/preview/${encodeURIComponent(sessionId)}/${relativePath}${q}`;
 }
 
 export interface ChatStreamParams {

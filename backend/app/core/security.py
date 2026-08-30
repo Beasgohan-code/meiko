@@ -13,7 +13,7 @@ import time
 from collections import defaultdict, deque
 from typing import Optional
 
-from fastapi import Header, HTTPException, Request, status
+from fastapi import Header, HTTPException, Query, Request, status
 
 from .config import get_settings
 
@@ -26,6 +26,22 @@ async def require_api_key(
         return  # auth disabled
     if x_api_key != settings.MEIKO_API_KEY:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key")
+
+
+async def require_api_key_header_or_query(
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    api_key: Optional[str] = Query(default=None),
+) -> None:
+    """Same check as require_api_key, but also accepts ?api_key= in the query
+    string. Needed for endpoints loaded directly by the browser without our
+    fetch wrapper attaching custom headers -- e.g. an <iframe src="..."> live
+    preview of a generated HTML artifact (vibe-coding mode)."""
+    settings = get_settings()
+    if not settings.MEIKO_API_KEY:
+        return  # auth disabled
+    if x_api_key == settings.MEIKO_API_KEY or api_key == settings.MEIKO_API_KEY:
+        return
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key")
 
 
 class RateLimiter:

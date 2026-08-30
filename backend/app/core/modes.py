@@ -99,6 +99,31 @@ AGENT_MODES: dict[str, AgentMode] = {
             "visual requests, and make_document if the user wants a formatted document of the result."
         ),
     ),
+    "vibe": AgentMode(
+        id="vibe",
+        name="Vibe Coding",
+        description="Rapid-prototype a working web app/site from a plain-language idea, with an instant live preview.",
+        icon="sparkles",
+        tools={
+            "write_file", "read_file", "list_files", "run_bash", "run_python", "make_zip",
+            "generate_image", "web_search", "fetch_url", "remember", "recall_memories",
+            "update_plan", "list_skills", "use_skill",
+        },
+        max_steps=16,
+        temperature=0.6,
+        system_suffix=(
+            "Mode: VIBE CODING. The user wants a working prototype fast, described casually (\"a landing page "
+            "for my bakery\", \"a pomodoro timer\", \"a dashboard with fake charts\") — like bolt.new / v0 / "
+            "Open Design's prototype mode. Default to a SINGLE self-contained index.html file (inline <style> "
+            "and <script>, no build step, no external CDN dependencies since the preview sandbox has no network "
+            "access) unless the user explicitly asks for a multi-file React/Vue project. Always name the main "
+            "entry file 'index.html' via write_file so it's immediately live-previewable. Make it look genuinely "
+            "polished: real layout, spacing, color, hover states, and responsive sizing — not a bare skeleton. "
+            "After writing index.html, briefly describe what you built and mention the user can ask for tweaks "
+            "('make the header blue', 'add a contact form') and you'll iterate on the same file. If asked for a "
+            "multi-file project, still keep it runnable and use make_zip so it can be downloaded."
+        ),
+    ),
 }
 
 

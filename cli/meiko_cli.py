@@ -61,6 +61,11 @@ Usage:
   # Download a file Meiko generated during a session
   meiko download <session_id> <filename> -o out.zip
 
+  # Vibe coding — rapid-prototype a working app/site from a plain idea, and
+  # get back a live preview link (bolt.new/v0-style, no local dev server)
+  meiko vibe "a pomodoro timer with a dark theme"
+  meiko preview <session_id>                # list live preview links for that session
+
 Works with zero install beyond `pip install httpx rich` (rich is optional,
 falls back to plain text if not installed).
 """
@@ -71,6 +76,7 @@ import concurrent.futures
 import json
 import os
 import sys
+import uuid
 from typing import Any, Optional
 
 import httpx
@@ -130,6 +136,7 @@ class MeikoClient:
         conversation_id: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        session_id: Optional[str] = None,
     ):
         payload = {
             "user_id": self.user_id,
@@ -138,6 +145,7 @@ class MeikoClient:
             "conversation_id": conversation_id,
             "provider": provider,
             "model": model,
+            "session_id": session_id,
         }
         with httpx.stream("POST", f"{self.server}/api/chat/stream", json=payload, headers=self.headers, timeout=300) as resp:
             for line in resp.iter_lines():
@@ -546,6 +554,49 @@ def cmd_download(client: MeikoClient, args) -> None:
 
 
 # --------------------------------------------------------------------------
+# Vibe coding — rapid-prototype command (bolt.new/v0-style, live preview link)
+# --------------------------------------------------------------------------
+def cmd_vibe(client: MeikoClient, args) -> None:
+    session_id = args.session or f"vibe-{uuid.uuid4().hex[:8]}"
+    out(f"[bold]✨ Vibe coding:[/] {args.idea}" if HAS_RICH else f"Vibe coding: {args.idea}")
+    out(f"[dim]session={session_id}[/]" if HAS_RICH else f"(session={session_id})")
+    print()
+    for event in client.chat_stream(args.idea, mode="vibe", provider=args.provider, session_id=session_id):
+        etype = event.get("type")
+        if etype == "token":
+            print(event["text"], end="", flush=True)
+        elif etype == "tool_call":
+            print()
+            out(f"  🔧 {event['name']}({json.dumps(event.get('arguments', {}))[:120]})", style="yellow")
+        elif etype == "error":
+            out(f"\n[Error] {event.get('message')}", style="red")
+        elif etype == "final":
+            print()
+    print()
+    try:
+        files = client.get(f"/api/workspace/{session_id}/files")
+    except Exception:
+        files = []
+    previews = [f for f in files if f.get("preview_url")]
+    if previews:
+        out("🔗 Live preview:", style="green")
+        for f in previews:
+            out(f"  {client.server}{f['preview_url']}  ({f['name']})")
+    else:
+        out(f"No previewable file yet — run `meiko preview {session_id}` later, or keep chatting in this session.", style="dim")
+
+
+def cmd_preview(client: MeikoClient, args) -> None:
+    files = client.get(f"/api/workspace/{args.session_id}/files")
+    previews = [f for f in files if f.get("preview_url")]
+    if not previews:
+        out("No previewable HTML files in this session yet.")
+        return
+    for f in previews:
+        out(f"{client.server}{f['preview_url']}  ({f['name']})")
+
+
+# --------------------------------------------------------------------------
 # argparse wiring
 # --------------------------------------------------------------------------
 def main() -> None:
@@ -645,6 +696,16 @@ def main() -> None:
     p_download.add_argument("filename")
     p_download.add_argument("-o", "--output", default=None)
     p_download.set_defaults(func=cmd_download)
+
+    p_vibe = sub.add_parser("vibe", help="Vibe coding — rapid-prototype a working app/site from a plain idea, with a live preview link")
+    p_vibe.add_argument("idea")
+    p_vibe.add_argument("--session", default=None, help="Reuse an existing session id to keep iterating on the same files")
+    p_vibe.add_argument("--provider", default=None)
+    p_vibe.set_defaults(func=cmd_vibe)
+
+    p_preview = sub.add_parser("preview", help="List live preview links for a session's generated HTML files")
+    p_preview.add_argument("session_id")
+    p_preview.set_defaults(func=cmd_preview)
 
     args = parser.parse_args()
     client = MeikoClient(args.server, args.user, args.api_key)

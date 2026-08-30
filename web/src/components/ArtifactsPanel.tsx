@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { FileText, Image as ImageIcon, FileArchive, FileCode, Download, RefreshCw, X, FolderOpen } from "lucide-react";
-import { WorkspaceFile, downloadUrl, fetchWorkspaceFiles } from "../lib/api";
+import { FileText, Image as ImageIcon, FileArchive, FileCode, Download, RefreshCw, X, FolderOpen, Eye, ExternalLink } from "lucide-react";
+import { WorkspaceFile, downloadUrl, fetchWorkspaceFiles, previewUrl } from "../lib/api";
 
 interface Props {
   sessionId: string;
@@ -40,6 +40,7 @@ function formatAge(ts: number): string {
 export default function ArtifactsPanel({ sessionId, onClose }: Props) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [previewing, setPreviewing] = useState<WorkspaceFile | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -85,14 +86,7 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
         {files.map((f) => {
           const Icon = iconFor(f.name);
           return (
-            <a
-              key={f.name + f.kind}
-              className="artifact-row"
-              href={downloadUrl(sessionId, f.name.split("/").pop() || f.name)}
-              target="_blank"
-              rel="noreferrer"
-              title={`Download ${f.name}`}
-            >
+            <div key={f.name + f.kind} className="artifact-row" title={f.name} style={{ paddingRight: 4 }}>
               <Icon size={16} />
               <div className="artifact-meta">
                 <span className="artifact-name">{f.name}</span>
@@ -100,11 +94,59 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
                   {formatSize(f.size_bytes)} · {formatAge(f.modified_at)} · {f.kind}
                 </span>
               </div>
-              <Download size={13} className="artifact-download-icon" />
-            </a>
+              {f.preview_url && (
+                <button
+                  className="icon-btn"
+                  title="Live preview"
+                  onClick={() => setPreviewing(f)}
+                >
+                  <Eye size={14} />
+                </button>
+              )}
+              <a
+                className="icon-btn"
+                href={downloadUrl(sessionId, f.name.split("/").pop() || f.name)}
+                target="_blank"
+                rel="noreferrer"
+                title={`Download ${f.name}`}
+              >
+                <Download size={13} className="artifact-download-icon" />
+              </a>
+            </div>
           );
         })}
       </div>
+      {previewing && (
+        <div className="preview-overlay" onClick={() => setPreviewing(null)}>
+          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-modal-header">
+              <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <Eye size={14} /> {previewing.name}
+              </span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <a
+                  className="icon-btn"
+                  href={previewUrl(sessionId, previewing.name)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open in new tab"
+                >
+                  <ExternalLink size={14} />
+                </a>
+                <button className="icon-btn" title="Close" onClick={() => setPreviewing(null)}>
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              className="preview-modal-frame"
+              src={previewUrl(sessionId, previewing.name)}
+              title={previewing.name}
+              sandbox="allow-scripts allow-forms allow-popups allow-modals"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

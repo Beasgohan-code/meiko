@@ -10,8 +10,12 @@ much like Claude's Connectors or a DeepSeek-style agent harness.
 ## ✨ Highlights
 
 - 🧠 **Full autonomous agent harness** — planning loop with live checklists (`update_plan`),
-  tool-calling, persistent memory, automatic provider fallback chains, and 5 built-in
-  **Agent Modes**: Chat, Research, Code, Autonomous, Creative
+  tool-calling, persistent memory, automatic provider fallback chains, and 6 built-in
+  **Agent Modes**: Chat, Research, Code, Autonomous, Creative, and **Vibe Coding**
+- ✨ **Vibe Coding mode** — describe an app/site in plain language ("a landing page for my bakery",
+  "a pomodoro timer") and get a working, styled prototype back fast, with an instant **live
+  preview** rendered right in the web app's Artifacts panel (or via `/preview` on Telegram/CLI) —
+  no download, no local dev server, bolt.new/v0-style
 - 🧩 **Skills** — reusable, markdown-defined playbooks (Claude Agent Skills style) the agent loads
   on demand: PDF report generation, web app scaffolding, competitive research, and easy to add more
   by dropping a `SKILL.md` into `backend/skills/`
@@ -183,6 +187,19 @@ agent can load the full instructions only when a task actually needs them.
 | **Code** | Writes, runs, and debugs code in a sandboxed workspace |
 | **Autonomous** | Full tool access, plans and executes multi-step tasks |
 | **Creative** | Image generation + creative writing focus |
+| **Vibe Coding** ✨ | Rapid-prototypes a working app/site (usually one `index.html`) from a casual, plain-language idea, with an instant live preview — low-ceremony, fast iteration |
+
+### 🔗 Live preview (Vibe Coding)
+
+Any HTML file Meiko writes in Vibe Coding mode gets a `preview_url` alongside its `download_url` in
+the workspace-files API. The web app's Artifacts panel shows an 👁 button that opens it in an iframe
+modal; the Telegram bot and CLI expose the same thing as a dedicated command:
+
+- **Web app**: type `/vibe <idea>` in the composer, or pick "Vibe Coding" from the mode switcher,
+  then open the Artifacts panel and click the preview icon on `index.html`.
+- **Telegram**: `/vibe <idea>` to build, `/preview` to get a tappable live link any time.
+- **CLI**: `meiko vibe "<idea>"` builds and prints the live preview link; `meiko preview <session_id>`
+  lists preview links for an existing session.
 
 ## 🙏 Credits & inspiration
 

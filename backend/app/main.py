@@ -11,6 +11,8 @@ Exposes:
   - GET/POST /api/connectors -> plugin/connector management
   - POST /api/upload       -> upload an image/document into a session workspace
   - GET  /api/download/{session_id}/{filename} -> download generated files/zip
+  - GET  /api/preview/{session_id}/{file_path} -> inline-render a generated file
+    (e.g. index.html) for the vibe-coding mode's live iframe preview
   - GET  /api/usage        -> per-user usage analytics summary
   - POST /api/sync/pair, POST /api/sync/claim, GET /api/sync/status,
     WS   /ws/sync/{user_id} -> cross-device pairing codes + live push so the
@@ -53,7 +55,12 @@ from .core.logging import get_logger, new_request_id, request_id_ctx, setup_logg
 from .core.modes import list_modes
 from .core.personas import get_persona, list_personas
 from .tools.skills import discover_skills
-from .core.security import enforce_chat_rate_limit, enforce_general_rate_limit, require_api_key
+from .core.security import (
+    enforce_chat_rate_limit,
+    enforce_general_rate_limit,
+    require_api_key,
+    require_api_key_header_or_query,
+)
 from .core.sync import get_pairing_registry, get_sync_hub
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
@@ -497,13 +504,16 @@ async def list_workspace_files(session_id: str):
             except ValueError:
                 continue
             stat = p.stat()
-            files.append({
+            entry = {
                 "name": str(rel),
                 "kind": kind,
                 "size_bytes": stat.st_size,
                 "modified_at": stat.st_mtime,
                 "download_url": f"/api/download/{safe_session}/{p.name}",
-            })
+            }
+            if kind == "workspace" and p.suffix.lower() in (".html", ".htm"):
+                entry["preview_url"] = f"/api/preview/{safe_session}/{rel.as_posix()}"
+            files.append(entry)
     files.sort(key=lambda f: f["modified_at"], reverse=True)
     return files
 
@@ -521,6 +531,22 @@ async def download_file(session_id: str, filename: str):
         if path.exists():
             return FileResponse(str(path), filename=safe_name)
     raise HTTPException(status_code=404, detail="File not found")
+
+
+@app.get("/api/preview/{session_id}/{file_path:path}", dependencies=[Depends(require_api_key_header_or_query)])
+async def preview_file(session_id: str, file_path: str):
+    """Serve a generated workspace file inline (not as an attachment) with a
+    real content-type, so it can be dropped straight into an <iframe> for a
+    live preview -- the core "vibe coding" payoff: write an index.html with
+    write_file and see it rendered instantly, bolt.new/v0-style, without
+    downloading anything. Accepts nested paths (e.g. 'src/index.html')."""
+    safe_session = Path(session_id).name
+    root = (Path(settings.DATA_DIR) / "workspaces" / safe_session).resolve()
+    target = (root / file_path).resolve()
+    if not str(target).startswith(str(root)) or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    mime, _ = mimetypes.guess_type(target.name)
+    return FileResponse(str(target), media_type=mime or "text/plain")
 
 
 # ---------------- Chat (SSE streaming) ----------------

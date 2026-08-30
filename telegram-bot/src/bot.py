@@ -56,6 +56,8 @@ from .meiko_client import (
     get_memories,
     get_usage,
     list_conversations,
+    list_workspace_files,
+    preview_url,
     rename_conversation,
     search_conversations,
     set_user_settings,
@@ -68,7 +70,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("meiko-bot")
 
 MODE_EMOJI = {
-    "chat": "💬", "research": "🔎", "code": "💻", "autonomous": "🤖", "creative": "🎨",
+    "chat": "💬", "research": "🔎", "code": "💻", "autonomous": "🤖", "creative": "🎨", "vibe": "✨",
 }
 
 # in-flight generation tasks per chat, so /stop can cancel them
@@ -132,6 +134,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("🗂 History", callback_data="menu:history"),
             InlineKeyboardButton("🌐 Language", callback_data="menu:lang"),
         ],
+        [
+            InlineKeyboardButton("✨ Vibe Coding", callback_data="mode:vibe"),
+        ],
     ]
     if config.WEBAPP_URL:
         buttons.append([InlineKeyboardButton("🌐 Open Meiko Web App", web_app=WebAppInfo(url=config.WEBAPP_URL))])
@@ -142,9 +147,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Qwen, Llama and more), plus Gemini/Groq/OpenRouter. I can research the web, write & run code and shell "
         "commands, generate images, remember things about you long-term, use Skills for specialized playbooks, "
         "and connect to GitHub (read *and* write), Wikipedia, Reddit, Hacker News, and weather.\n\n"
+        "✨ Want a fast prototype instead? Try /vibe — describe an app or site in plain language and get a "
+        "working, live-previewable build back in one shot.\n\n"
         "Just send me a message to get started, or use the menu below.\n\n"
-        "*Commands:* /mode /persona /providers /model /lang /memory /connectors /skills /github /history "
-        "/rename /usage /new /stop /help",
+        "*Commands:* /vibe /preview /mode /persona /providers /model /lang /memory /connectors /skills /github "
+        "/history /rename /usage /new /stop /help",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(buttons),
     )
@@ -167,6 +174,52 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state["conversation_id"] = None
     state["session_id"] = str(uuid.uuid4())
     await update.message.reply_text("🆕 Started a fresh conversation. What's on your mind?")
+
+
+async def cmd_vibe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Quick-switch shortcut into Vibe Coding mode -- Meiko's rapid-prototype
+    mode (bolt.new/v0-style: describe an app/site casually, get a working
+    index.html back instantly with a /preview link). If given an idea right
+    after the command, it also kicks off that build in one step, e.g.
+    '/vibe a pomodoro timer with a dark theme'."""
+    if not await _guard(update):
+        return
+    state = _chat_state(context)
+    state["mode"] = "vibe"
+    if context.args:
+        idea = " ".join(context.args)
+        await update.message.reply_text("✨ Vibe mode on — spinning up your idea…")
+        await on_message_with_text(update, context, idea)
+    else:
+        await update.message.reply_text(
+            "✨ *Vibe Coding mode* is on.\n\n"
+            "Just describe what you want in plain language — \"a landing page for my bakery\", "
+            "\"a pomodoro timer\", \"a dashboard with fake charts\" — and I'll build a working, styled "
+            "prototype fast (usually one `index.html`, no setup). Use /preview any time to get a live link, "
+            "and just keep chatting to iterate (\"make the header blue\").",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+async def cmd_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List/open a live preview link for any HTML file Meiko has generated
+    in the current session's workspace (the vibe-coding payoff — no download
+    needed, tap the link and it renders right in your browser)."""
+    if not await _guard(update):
+        return
+    state = _chat_state(context)
+    files = await list_workspace_files(state["session_id"])
+    html_files = [f for f in files if f.get("preview_url")]
+    if not html_files:
+        await update.message.reply_text(
+            "No previewable files yet. Try /vibe to build something, or ask me to write an index.html."
+        )
+        return
+    lines = ["🔗 *Live previews:*"]
+    for f in html_files[:10]:
+        url = preview_url(state["session_id"], f["name"])
+        lines.append(f"• [{f['name']}]({url})")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=False)
 
 
 async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -674,6 +727,8 @@ async def _post_init(app: Application) -> None:
         BotCommand("new", "Start a fresh conversation"),
         BotCommand("imagine", "Generate an image from a text prompt"),
         BotCommand("mode", "Switch agent mode"),
+        BotCommand("vibe", "✨ Vibe coding — rapid-prototype an app/site"),
+        BotCommand("preview", "🔗 Get live preview links for generated apps"),
         BotCommand("persona", "Switch persona"),
         BotCommand("providers", "Switch model provider"),
         BotCommand("model", "Pick a specific model (DeepSeek, Kimi, GLM, Qwen...)"),
@@ -702,6 +757,8 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("imagine", cmd_imagine))
     app.add_handler(CommandHandler("stop", cmd_stop))
     app.add_handler(CommandHandler("mode", cmd_mode))
+    app.add_handler(CommandHandler("vibe", cmd_vibe))
+    app.add_handler(CommandHandler("preview", cmd_preview))
     app.add_handler(CommandHandler("persona", cmd_persona))
     app.add_handler(CommandHandler("providers", cmd_providers))
     app.add_handler(CommandHandler("model", cmd_model))

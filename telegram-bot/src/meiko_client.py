@@ -182,3 +182,19 @@ async def upload_file(session_id: str, filename: str, content: bytes, mime: str 
 
 def download_url(session_id: str, filename: str) -> str:
     return f"{config.MEIKO_BACKEND_URL}/api/download/{session_id}/{filename}"
+
+
+async def list_workspace_files(session_id: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(f"{config.MEIKO_BACKEND_URL}/api/workspace/{session_id}/files", headers=_headers())
+        if resp.status_code != 200:
+            return []
+        return resp.json()
+
+
+def preview_url(session_id: str, relative_path: str) -> str:
+    """Public URL for the live preview of a generated HTML artifact
+    (vibe-coding mode's /preview command) -- includes the API key as a
+    query param since Telegram opens this as a plain browser link."""
+    key = f"?api_key={config.MEIKO_API_KEY}" if config.MEIKO_API_KEY else ""
+    return f"{config.MEIKO_BACKEND_URL}/api/preview/{session_id}/{relative_path}{key}"

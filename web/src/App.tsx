@@ -30,6 +30,7 @@ export default function App() {
     messages,
     isStreaming,
     setConversationId,
+    setMode,
     addUserMessage,
     startAssistantMessage,
     appendToken,
@@ -107,7 +108,36 @@ export default function App() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  // Specific web-app slash-command: "/vibe [idea]" instantly switches into
+  // Vibe Coding mode (bolt.new/v0-style rapid prototyping) and, if an idea
+  // was given right after the command, kicks off that build in one step —
+  // mirrors the Telegram bot's /vibe command.
+  const handleVibeCommand = (raw: string): boolean => {
+    const match = raw.trim().match(/^\/vibe\b\s*(.*)$/i);
+    if (!match) return false;
+    setMode("vibe");
+    const idea = match[1].trim();
+    if (idea) {
+      sendMessage(idea);
+    } else {
+      addUserMessage(raw.trim());
+      finishAssistantMessageWithText(
+        "✨ **Vibe Coding mode** is on. Describe what you want in plain language — \"a landing page for my " +
+          "bakery\", \"a pomodoro timer\", \"a dashboard with fake charts\" — and I'll build a working, styled " +
+          "prototype fast, usually a single `index.html` you can preview instantly from the Artifacts panel."
+      );
+    }
+    return true;
+  };
+
+  const finishAssistantMessageWithText = (text: string) => {
+    const id = startAssistantMessage();
+    appendToken(id, text);
+    finishAssistantMessage(id);
+  };
+
   const sendMessage = async (text: string) => {
+    if (handleVibeCommand(text)) return;
     addUserMessage(text);
     const assistantId = startAssistantMessage();
     setStreaming(true);

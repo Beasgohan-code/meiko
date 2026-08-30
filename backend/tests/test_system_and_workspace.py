@@ -79,3 +79,51 @@ async def test_workspace_files_path_traversal_is_contained(app_client):
     resp = await app_client.get("/api/workspace/..%2e/files")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ---------------- Vibe Coding mode + live preview endpoint (Phase 7) ----------------
+async def test_vibe_mode_listed_and_has_write_file_tool():
+    from app.core.modes import get_mode, list_modes
+
+    ids = {m.id for m in list_modes()}
+    assert "vibe" in ids
+    vibe = get_mode("vibe")
+    assert vibe.tools is not None
+    assert "write_file" in vibe.tools
+    assert vibe.temperature > 0
+
+
+async def test_preview_serves_generated_html_inline(app_client):
+    from app import main as main_module
+
+    data_dir = Path(main_module.settings.DATA_DIR)
+    session_id = "vibe-preview-session"
+    ws = data_dir / "workspaces" / session_id
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "index.html").write_text("<html><body>Hello Vibe</body></html>", encoding="utf-8")
+
+    resp = await app_client.get(f"/api/preview/{session_id}/index.html")
+    assert resp.status_code == 200
+    assert "Hello Vibe" in resp.text
+    assert resp.headers["content-type"].startswith("text/html")
+
+
+async def test_preview_lists_preview_url_for_html_only(app_client):
+    from app import main as main_module
+
+    data_dir = Path(main_module.settings.DATA_DIR)
+    session_id = "vibe-preview-listing-session"
+    ws = data_dir / "workspaces" / session_id
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "index.html").write_text("<html></html>", encoding="utf-8")
+    (ws / "notes.md").write_text("# notes", encoding="utf-8")
+
+    resp = await app_client.get(f"/api/workspace/{session_id}/files")
+    files = {f["name"]: f for f in resp.json()}
+    assert files["index.html"]["preview_url"] == f"/api/preview/{session_id}/index.html"
+    assert "preview_url" not in files["notes.md"]
+
+
+async def test_preview_rejects_path_traversal(app_client):
+    resp = await app_client.get("/api/preview/some-session/..%2F..%2Fetc%2Fpasswd")
+    assert resp.status_code == 404
