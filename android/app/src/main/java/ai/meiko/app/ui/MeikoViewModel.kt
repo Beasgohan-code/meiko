@@ -56,6 +56,10 @@ data class MeikoUiState(
     val conversations: List<ConversationSummary> = emptyList(),
     val conversationId: String? = null,
     val darkTheme: Boolean = true,
+    val githubAuthEnabled: Boolean = false,
+    val authUsername: String? = null,
+    val authAvatarUrl: String? = null,
+    val showAuthScreen: Boolean = false,
 )
 
 class MeikoViewModel(application: Application) : AndroidViewModel(application) {
@@ -81,6 +85,8 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
             val model = prefs.model()
             val uiLanguage = prefs.uiLanguage()
             val theme = prefs.theme()
+            val authUsername = prefs.authUsername()
+            val authAvatarUrl = prefs.authAvatarUrl()
             _state.value = _state.value.copy(
                 backendUrl = backendUrl,
                 mode = mode,
@@ -89,8 +95,47 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
                 model = model,
                 uiLanguage = uiLanguage,
                 darkTheme = theme != "light",
+                authUsername = authUsername,
+                authAvatarUrl = authAvatarUrl,
             )
             refreshCatalogs()
+            runCatching { api.fetchAuthConfig() }.onSuccess { cfg ->
+                _state.value = _state.value.copy(githubAuthEnabled = cfg.github_enabled)
+            }
+        }
+    }
+
+    // ---------- Optional GitHub sign-in ----------
+    fun githubLoginUrl(): String = api.githubLoginUrl()
+
+    fun setAuthScreenVisible(visible: Boolean) {
+        _state.value = _state.value.copy(showAuthScreen = visible)
+    }
+
+    /** Called by AuthScreen once it intercepts the meiko://auth#token=...
+     * redirect. Resolves the profile, persists the session, and switches
+     * the app's active user_id to the account so data follows it. */
+    fun onGithubToken(token: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(showAuthScreen = false)
+            runCatching { api.fetchMe(token) }.onSuccess { user ->
+                prefs.setAuthSession(token, user.user_id, user.username, user.avatar_url)
+                userId = user.user_id
+                _state.value = _state.value.copy(
+                    authUsername = user.username,
+                    authAvatarUrl = user.avatar_url,
+                    conversationId = null,
+                    messages = emptyList(),
+                )
+                refreshCatalogs()
+            }
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            prefs.clearAuthSession()
+            _state.value = _state.value.copy(authUsername = null, authAvatarUrl = null)
         }
     }
 

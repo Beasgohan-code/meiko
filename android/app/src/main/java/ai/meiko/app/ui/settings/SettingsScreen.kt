@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -75,7 +76,11 @@ fun SettingsScreen(viewModel: MeikoViewModel, onBack: () -> Unit) {
     var apiKeyInput by remember { mutableStateOf("") }
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
-    val tabs = listOf("Providers", "Models", "Persona", "Memory", "Skills")
+    val tabs = if (state.githubAuthEnabled) {
+        listOf("Providers", "Models", "Persona", "Memory", "Skills", "Account")
+    } else {
+        listOf("Providers", "Models", "Persona", "Memory", "Skills")
+    }
 
     Scaffold(
         containerColor = MeikoColors.Bg0,
@@ -128,6 +133,12 @@ fun SettingsScreen(viewModel: MeikoViewModel, onBack: () -> Unit) {
                         onClearAll = { viewModel.clearAllMemories() },
                     )
                     4 -> SkillsTab(skills = state.skills)
+                    5 -> AccountTab(
+                        username = state.authUsername,
+                        avatarUrl = state.authAvatarUrl,
+                        onSignIn = { viewModel.setAuthScreenVisible(true) },
+                        onSignOut = { viewModel.signOut() },
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -356,6 +367,58 @@ private fun MemoryTab(memories: List<ai.meiko.app.data.MemoryFact>, onDelete: (S
             Spacer(Modifier.height(10.dp))
             TextButton(onClick = onClearAll) {
                 Text("Clear all memories", color = MeikoColors.Danger)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountTab(
+    username: String?,
+    avatarUrl: String?,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    Column {
+        Text("Account", fontWeight = FontWeight.Bold, color = MeikoColors.Text0, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Optional: sign in with GitHub to make your conversations, memories, and settings follow your account across every device — instead of a locally-generated id.",
+            fontSize = 12.sp,
+            color = MeikoColors.Text2,
+        )
+        Spacer(Modifier.height(14.dp))
+        if (username != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MeikoColors.Panel)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (avatarUrl != null) {
+                    coil.compose.AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = username,
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp)),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Signed in as", color = MeikoColors.Text2, fontSize = 11.sp)
+                    Text(username, color = MeikoColors.Text0, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+                TextButton(onClick = onSignOut) { Text("Sign out", color = MeikoColors.Violet) }
+            }
+        } else {
+            OutlinedButton(
+                onClick = onSignIn,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MeikoColors.Text0),
+            ) {
+                Text("Sign in with GitHub")
             }
         }
     }

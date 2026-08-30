@@ -79,6 +79,19 @@ CREATE TABLE IF NOT EXISTS memories (
     created_at REAL
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL DEFAULT 'github',
+    provider_uid TEXT NOT NULL,
+    username TEXT NOT NULL,
+    name TEXT,
+    email TEXT,
+    avatar_url TEXT,
+    created_at REAL,
+    last_login_at REAL,
+    UNIQUE(provider, provider_uid)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
     fact, content='memories', content_rowid='rowid'
 );
@@ -426,6 +439,68 @@ class SQLiteStore:
                 for i in ordered_ids
                 if i in by_id
             ]
+
+    # ---------- User accounts (GitHub OAuth) ----------
+    async def get_or_create_oauth_user(
+        self,
+        provider: str,
+        provider_uid: str,
+        username: str,
+        name: Optional[str] = None,
+        email: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Look up a user by (provider, provider_uid), creating one on first
+        login. The Meiko-internal `id` is what becomes the account's stable
+        `user_id` used everywhere else in the app (conversations, settings,
+        memories) — so once someone logs in, their data follows their
+        GitHub identity across every device instead of a made-up string."""
+        now = time.time()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM users WHERE provider = ? AND provider_uid = ?", (provider, provider_uid)
+            )
+            row = await cur.fetchone()
+            if row:
+                user_id = row["id"]
+                await db.execute(
+                    "UPDATE users SET username=?, name=?, email=?, avatar_url=?, last_login_at=? WHERE id=?",
+                    (username, name, email, avatar_url, now, user_id),
+                )
+                await db.commit()
+                return {
+                    "id": user_id,
+                    "provider": provider,
+                    "provider_uid": provider_uid,
+                    "username": username,
+                    "name": name,
+                    "email": email,
+                    "avatar_url": avatar_url,
+                }
+            user_id = f"gh_{provider_uid}"
+            await db.execute(
+                """INSERT INTO users (id, provider, provider_uid, username, name, email, avatar_url, created_at, last_login_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (user_id, provider, provider_uid, username, name, email, avatar_url, now, now),
+            )
+            await db.commit()
+            return {
+                "id": user_id,
+                "provider": provider,
+                "provider_uid": provider_uid,
+                "username": username,
+                "name": name,
+                "email": email,
+                "avatar_url": avatar_url,
+            }
+
+    async def get_user(self, user_id: str) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+            row = await cur.fetchone()
+            return dict(row) if row else None
 
 
 

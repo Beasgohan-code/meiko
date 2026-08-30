@@ -60,6 +60,19 @@ class MeikoApi(private var baseUrl: String, private var apiKey: String? = null) 
         apiKey?.let { if (it.isNotBlank()) header("X-API-Key", it) }
     }
 
+    /** GitHub OAuth login base URL — opened in a WebView/Custom Tab by the
+     * UI; `client_redirect` tells the backend to bounce back to our own
+     * "meiko://auth#token=..." custom scheme instead of the web app's URL,
+     * which the WebView intercepts (see AuthScreen.kt). */
+    fun githubLoginUrl(): String =
+        "$baseUrl/api/auth/github/login?client_redirect=" +
+            java.net.URLEncoder.encode("meiko://auth", "UTF-8")
+
+    suspend fun fetchAuthConfig(): AuthConfig = client.get("$baseUrl/api/auth/config").body()
+
+    suspend fun fetchMe(token: String): AuthUser =
+        client.get("$baseUrl/api/auth/me") { header(HttpHeaders.Authorization, "Bearer $token") }.body()
+
     suspend fun fetchModes(): List<AgentModeMeta> = client.get("$baseUrl/api/modes").body()
     suspend fun fetchPersonas(): List<PersonaMeta> = client.get("$baseUrl/api/personas").body()
     suspend fun fetchProviders(): List<ProviderMeta> = client.get("$baseUrl/api/providers").body()

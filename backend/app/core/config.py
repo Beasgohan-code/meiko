@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     # --- Auth ---
     MEIKO_API_KEY: Optional[str] = None  # if set, clients must send X-API-Key to hit /api
 
+    # --- User accounts (GitHub OAuth + JWT sessions) ---
+    # Optional: if unset, the "Sign in with GitHub" button hides itself and
+    # Meiko keeps working exactly as before (client-generated user_id, no
+    # accounts). Create a GitHub OAuth App at
+    # https://github.com/settings/developers with callback URL
+    # "<your backend base url>/api/auth/github/callback" to enable it.
+    GITHUB_OAUTH_CLIENT_ID: Optional[str] = None
+    GITHUB_OAUTH_CLIENT_SECRET: Optional[str] = None
+    # Where to send the browser back to after login, with the session JWT
+    # in the URL fragment, e.g. "http://localhost:5173/auth/callback".
+    OAUTH_FRONTEND_REDIRECT_URL: str = "http://localhost:5173/auth/callback"
+    # Secret used to sign session JWTs; falls back to SECRET_KEY if unset.
+    JWT_SECRET: Optional[str] = None
+
     # --- Rate limiting (in-memory, per-process) ---
     RATE_LIMIT_CHAT_PER_MIN: int = 20
     RATE_LIMIT_GENERAL_PER_MIN: int = 120

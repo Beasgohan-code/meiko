@@ -1,10 +1,13 @@
 package ai.meiko.app.ui.chat
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ai.meiko.app.ui.MeikoViewModel
+import ai.meiko.app.ui.auth.AuthScreen
 import ai.meiko.app.ui.history.HistoryScreen
 import ai.meiko.app.ui.settings.SettingsScreen
 
@@ -17,6 +20,7 @@ object Routes {
 @Composable
 fun MeikoApp(viewModel: MeikoViewModel) {
     val navController = rememberNavController()
+    val state by viewModel.state.collectAsState()
 
     NavHost(navController = navController, startDestination = Routes.CHAT) {
         composable(Routes.CHAT) {
@@ -39,5 +43,15 @@ fun MeikoApp(viewModel: MeikoViewModel) {
                 },
             )
         }
+    }
+
+    // Full-screen "Sign in with GitHub" WebView overlay, triggered from
+    // SettingsScreen's Account section.
+    if (state.showAuthScreen) {
+        AuthScreen(
+            loginUrl = viewModel.githubLoginUrl(),
+            onToken = { viewModel.onGithubToken(it) },
+            onClose = { viewModel.setAuthScreenVisible(false) },
+        )
     }
 }

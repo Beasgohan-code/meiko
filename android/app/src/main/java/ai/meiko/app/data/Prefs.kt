@@ -21,6 +21,9 @@ class MeikoPrefs(private val context: Context) {
         val UI_LANGUAGE = stringPreferencesKey("ui_language")
         val API_KEY = stringPreferencesKey("meiko_api_key")
         val THEME = stringPreferencesKey("theme")
+        val AUTH_TOKEN = stringPreferencesKey("auth_token")
+        val AUTH_USERNAME = stringPreferencesKey("auth_username")
+        val AUTH_AVATAR = stringPreferencesKey("auth_avatar")
     }
 
     suspend fun backendUrl(default: String): String =
@@ -72,5 +75,29 @@ class MeikoPrefs(private val context: Context) {
     suspend fun theme(): String = context.dataStore.data.first()[Keys.THEME] ?: "dark"
     suspend fun setTheme(v: String) {
         context.dataStore.edit { it[Keys.THEME] = v }
+    }
+
+    // ---------- Optional GitHub-account session (JWT) ----------
+    suspend fun authToken(): String? = context.dataStore.data.first()[Keys.AUTH_TOKEN]
+    suspend fun authUsername(): String? = context.dataStore.data.first()[Keys.AUTH_USERNAME]
+    suspend fun authAvatarUrl(): String? = context.dataStore.data.first()[Keys.AUTH_AVATAR]
+
+    /** Saving a session also makes the account's stable user_id the app's
+     * user_id, so conversations/settings/memories follow the account. */
+    suspend fun setAuthSession(token: String, userId: String, username: String, avatarUrl: String?) {
+        context.dataStore.edit {
+            it[Keys.AUTH_TOKEN] = token
+            it[Keys.AUTH_USERNAME] = username
+            it[Keys.USER_ID] = userId
+            if (avatarUrl != null) it[Keys.AUTH_AVATAR] = avatarUrl else it.remove(Keys.AUTH_AVATAR)
+        }
+    }
+
+    suspend fun clearAuthSession() {
+        context.dataStore.edit {
+            it.remove(Keys.AUTH_TOKEN)
+            it.remove(Keys.AUTH_USERNAME)
+            it.remove(Keys.AUTH_AVATAR)
+        }
     }
 }

@@ -83,6 +83,19 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memories_fts ON memories USING GIN(fact_tsv);
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL DEFAULT 'github',
+    provider_uid TEXT NOT NULL,
+    username TEXT NOT NULL,
+    name TEXT,
+    email TEXT,
+    avatar_url TEXT,
+    created_at DOUBLE PRECISION,
+    last_login_at DOUBLE PRECISION,
+    UNIQUE(provider, provider_uid)
+);
 """
 
 
@@ -425,3 +438,48 @@ class PostgresStore:
                 for i in ordered_ids
                 if i in by_id
             ]
+
+    # ---------- User accounts (GitHub OAuth) ----------
+    async def get_or_create_oauth_user(
+        self,
+        provider: str,
+        provider_uid: str,
+        username: str,
+        name: Optional[str] = None,
+        email: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+    ) -> dict[str, Any]:
+        now = time.time()
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM users WHERE provider = $1 AND provider_uid = $2", provider, provider_uid
+            )
+            if row:
+                user_id = row["id"]
+                await conn.execute(
+                    "UPDATE users SET username=$1, name=$2, email=$3, avatar_url=$4, last_login_at=$5 WHERE id=$6",
+                    username, name, email, avatar_url, now, user_id,
+                )
+            else:
+                user_id = f"gh_{provider_uid}"
+                await conn.execute(
+                    """INSERT INTO users (id, provider, provider_uid, username, name, email, avatar_url, created_at, last_login_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                    user_id, provider, provider_uid, username, name, email, avatar_url, now, now,
+                )
+            return {
+                "id": user_id,
+                "provider": provider,
+                "provider_uid": provider_uid,
+                "username": username,
+                "name": name,
+                "email": email,
+                "avatar_url": avatar_url,
+            }
+
+    async def get_user(self, user_id: str) -> Optional[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+            return self._row(row)

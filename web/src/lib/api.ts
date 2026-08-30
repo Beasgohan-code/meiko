@@ -98,6 +98,37 @@ export async function fetchProviders(): Promise<ProviderMeta[]> {
   return res.json();
 }
 
+// ---------------- Auth (optional GitHub sign-in) ----------------
+export interface AuthUser {
+  user_id: string;
+  username: string;
+  name?: string;
+  email?: string;
+  avatar_url?: string;
+}
+
+export async function fetchAuthConfig(): Promise<{ github_enabled: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/auth/config`);
+  return res.json();
+}
+
+/** Full backend URL to send the browser to for the GitHub OAuth handshake. */
+export function githubLoginUrl(): string {
+  return `${BASE_URL || window.location.origin}/api/auth/github/login`;
+}
+
+export async function fetchMe(token: string): Promise<AuthUser | null> {
+  const res = await fetch(`${BASE_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${BASE_URL}/api/auth/logout`, { method: "POST" });
+}
+
 export async function fetchModes(): Promise<AgentModeMeta[]> {
   const res = await fetch(`${BASE_URL}/api/modes`);
   return res.json();

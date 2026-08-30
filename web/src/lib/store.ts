@@ -44,9 +44,20 @@ export interface ChatMessage {
   isThinking?: boolean;
 }
 
+export interface AuthUserInfo {
+  user_id: string;
+  username: string;
+  name?: string;
+  email?: string;
+  avatar_url?: string;
+}
+
 interface MeikoState {
   userId: string;
   sessionId: string;
+  authToken?: string;
+  authUser?: AuthUserInfo;
+  setAuth: (token: string | undefined, user: AuthUserInfo | undefined) => void;
   conversationId?: string;
   mode: string;
   personaId: string;
@@ -87,6 +98,11 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
     return id;
   })(),
   sessionId: uuidv4(),
+  authToken: localStorage.getItem("meiko_auth_token") || undefined,
+  authUser: (() => {
+    const raw = localStorage.getItem("meiko_auth_user");
+    return raw ? JSON.parse(raw) : undefined;
+  })(),
   conversationId: undefined,
   mode: "autonomous",
   personaId: "default",
@@ -115,6 +131,21 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
   setUserId: (id) => {
     localStorage.setItem("meiko_user_id", id);
     set({ userId: id, conversationId: undefined, messages: [] });
+  },
+
+  setAuth: (token, user) => {
+    if (token && user) {
+      localStorage.setItem("meiko_auth_token", token);
+      localStorage.setItem("meiko_auth_user", JSON.stringify(user));
+      // A logged-in GitHub account becomes the canonical user_id, so
+      // conversations/settings/memories follow the account everywhere.
+      localStorage.setItem("meiko_user_id", user.user_id);
+      set({ authToken: token, authUser: user, userId: user.user_id, conversationId: undefined, messages: [] });
+    } else {
+      localStorage.removeItem("meiko_auth_token");
+      localStorage.removeItem("meiko_auth_user");
+      set({ authToken: undefined, authUser: undefined });
+    }
   },
 
   addUserMessage: (content) => {

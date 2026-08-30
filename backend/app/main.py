@@ -36,7 +36,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.schemas import (
@@ -62,6 +62,7 @@ from .core.security import (
     require_api_key_header_or_query,
 )
 from .core.sync import get_pairing_registry, get_sync_hub
+from .core import auth as auth_core
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
 from .plugins.manager import get_connector_manager
@@ -191,6 +192,101 @@ async def system_status():
         "default_provider": settings.DEFAULT_PROVIDER,
         "embeddings_enabled": bool(getattr(settings, "EMBEDDINGS_PROVIDER", None)),
     }
+
+
+# ---------------- Auth (GitHub OAuth + JWT sessions) ----------------
+_oauth_states: dict[str, dict] = {}  # state -> {"ts": float, "client_redirect": Optional[str]}
+
+
+def _client_redirect_allowed(url: str) -> bool:
+    """Small allowlist so `client_redirect` can't be used as an open
+    redirect: the configured web frontend URL, localhost (dev), or the
+    native Android app's own custom URI scheme (registered in its
+    manifest — see android/.../MainActivity.kt)."""
+    settings = get_settings()
+    allowed_prefixes = (
+        settings.OAUTH_FRONTEND_REDIRECT_URL,
+        "http://localhost",
+        "http://127.0.0.1",
+        "meiko://auth",
+    )
+    return any(url.startswith(p) for p in allowed_prefixes)
+
+
+@app.get("/api/auth/config")
+async def auth_config():
+    """Lets the UI know whether to show the 'Sign in with GitHub' button at
+    all — Meiko works fully accountless if this isn't configured."""
+    return {"github_enabled": auth_core.github_oauth_configured()}
+
+
+@app.get("/api/auth/github/login")
+async def github_login(request: Request, client_redirect: Optional[str] = Query(default=None)):
+    if not auth_core.github_oauth_configured():
+        raise HTTPException(status_code=503, detail="GitHub OAuth is not configured on this server")
+    if client_redirect and not _client_redirect_allowed(client_redirect):
+        raise HTTPException(status_code=400, detail="client_redirect is not on the allowlist")
+    state = uuid.uuid4().hex
+    now = time.time()
+    _oauth_states[state] = {"ts": now, "client_redirect": client_redirect}
+    # sweep stale states (10 min TTL) so this dict can't grow unbounded
+    for k in [k for k, v in _oauth_states.items() if now - v["ts"] > 600]:
+        _oauth_states.pop(k, None)
+    # Callback must exactly match a URL registered on the GitHub OAuth App
+    # (same host/scheme this login request came in on).
+    callback_url = str(request.url_for("github_callback"))
+    return RedirectResponse(auth_core.build_github_authorize_url(callback_url, state))
+
+
+@app.get("/api/auth/github/callback")
+async def github_callback(request: Request, code: str = Query(...), state: str = Query(...)):
+    if not auth_core.github_oauth_configured():
+        raise HTTPException(status_code=503, detail="GitHub OAuth is not configured on this server")
+    state_entry = _oauth_states.pop(state, None)
+    if not state_entry:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+
+    redirect_uri = str(request.url).split("?")[0]
+    profile = await auth_core.exchange_github_code(code, redirect_uri)
+    store = get_store()
+    user = await store.get_or_create_oauth_user(
+        provider="github",
+        provider_uid=profile["github_id"],
+        username=profile["username"],
+        name=profile.get("name"),
+        email=profile.get("email"),
+        avatar_url=profile.get("avatar_url"),
+    )
+    token = auth_core.issue_session_token(user["id"], user["username"])
+    frontend_url = state_entry.get("client_redirect") or settings.OAUTH_FRONTEND_REDIRECT_URL
+    # Token goes in the URL *fragment* (#...), which browsers never send to
+    # a server, so it can't end up in this server's or any proxy's access
+    # logs the way a query string would. Android's custom-scheme redirect
+    # (meiko://auth#token=...) is handled the same way by its WebView.
+    return RedirectResponse(f"{frontend_url}#token={token}")
+
+
+@app.get("/api/auth/me")
+async def auth_me(session=Depends(auth_core.require_user)):
+    store = get_store()
+    user = await store.get_user(session["sub"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user_id": user["id"],
+        "username": user["username"],
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "avatar_url": user.get("avatar_url"),
+    }
+
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    # Sessions are stateless JWTs; logout is a client-side token discard.
+    # This endpoint exists for a symmetric client flow and as a hook point
+    # if server-side token revocation (e.g. a deny-list) is added later.
+    return {"status": "ok"}
 
 
 @app.get("/api/providers")

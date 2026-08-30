@@ -97,6 +97,18 @@ data class RunInfo(
     val tokensPerSecond: Double? = null,
 )
 
+@Serializable
+data class AuthConfig(val github_enabled: Boolean = false)
+
+@Serializable
+data class AuthUser(
+    val user_id: String,
+    val username: String,
+    val name: String? = null,
+    val email: String? = null,
+    val avatar_url: String? = null,
+)
+
 data class ChatMessage(
     val id: String,
     val role: ChatRole,

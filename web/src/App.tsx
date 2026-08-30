@@ -8,8 +8,9 @@ import Composer from "./components/Composer";
 import SettingsModal from "./components/SettingsModal";
 import ArtifactsPanel from "./components/ArtifactsPanel";
 import CommandPalette from "./components/CommandPalette";
-import { AgentEvent, AgentModeMeta, PersonaMeta, connectSyncSocket, fetchModes, fetchPersonas, fetchWorkspaceFiles, getConversationMessages, streamChat, uploadFile } from "./lib/api";
+import { AgentEvent, AgentModeMeta, PersonaMeta, connectSyncSocket, fetchAuthConfig, fetchMe, fetchModes, fetchPersonas, fetchWorkspaceFiles, getConversationMessages, githubLoginUrl, streamChat, uploadFile } from "./lib/api";
 import { useMeikoStore } from "./lib/store";
+import { LogIn, LogOut } from "lucide-react";
 import { animateHeroText, animateStagger } from "./lib/animations";
 import { useI18n, SUPPORTED_LANGUAGES } from "./lib/i18n";
 
@@ -51,10 +52,14 @@ export default function App() {
     loadMessages,
     theme,
     toggleTheme,
+    authToken,
+    authUser,
+    setAuth,
   } = useMeikoStore();
 
   const [modes, setModes] = useState<AgentModeMeta[]>([]);
   const [personas, setPersonas] = useState<PersonaMeta[]>([]);
+  const [githubAuthEnabled, setGithubAuthEnabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -71,6 +76,30 @@ export default function App() {
   useEffect(() => {
     fetchModes().then(setModes);
     fetchPersonas().then(setPersonas);
+    fetchAuthConfig().then((c) => setGithubAuthEnabled(c.github_enabled));
+  }, []);
+
+  // GitHub OAuth callback: the backend redirects back here with the
+  // session JWT in the URL *fragment* (never sent to any server, so it
+  // can't end up in access logs). Pick it up once, resolve the profile,
+  // persist it, then scrub the fragment from the address bar.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith("#token=")) {
+      const token = decodeURIComponent(hash.slice("#token=".length));
+      fetchMe(token).then((user) => {
+        if (user) setAuth(token, user);
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      });
+    } else if (authToken && !authUser) {
+      // Have a token but no cached profile (e.g. cleared localStorage
+      // partially) — re-resolve it, or drop it if it's no longer valid.
+      fetchMe(authToken).then((user) => {
+        if (user) setAuth(authToken, user);
+        else setAuth(undefined, undefined);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Global command palette — Cmd/Ctrl+K (menus.ai / Arena / Raycast-style).
@@ -417,6 +446,36 @@ export default function App() {
               </motion.div>
             )}
             </AnimatePresence>
+            {githubAuthEnabled && (
+              authUser ? (
+                <motion.button
+                  className="composer-btn"
+                  title={`Signed in as ${authUser.username} — click to sign out`}
+                  onClick={() => {
+                    if (window.confirm(`Sign out of ${authUser.username}?`)) setAuth(undefined, undefined);
+                  }}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                  style={{ padding: 0, overflow: "hidden", borderRadius: "50%", width: 34, height: 34 }}
+                >
+                  {authUser.avatar_url ? (
+                    <img src={authUser.avatar_url} alt={authUser.username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <LogOut size={16} />
+                  )}
+                </motion.button>
+              ) : (
+                <motion.button
+                  className="composer-btn"
+                  title="Sign in with GitHub"
+                  onClick={() => { window.location.href = githubLoginUrl(); }}
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <LogIn size={17} />
+                </motion.button>
+              )
+            )}
           </div>
           <MeikoOrb state={orbState} size={44} />
         </div>
