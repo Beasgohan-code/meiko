@@ -1,0 +1,26 @@
+{
+  "id": "arxiv",
+  "name": "arXiv",
+  "description": "Search arXiv.org for academic papers (free, keyless, official Atom API).",
+  "base_url": "https://export.arxiv.org/api",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "arxiv_search",
+      "description": "Search arXiv papers by keyword, author, or category. Returns titles, authors, abstract snippets, and links.",
+      "method": "GET",
+      "path": "/query",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "search_query": { "type": "string", "description": "e.g. 'all:transformer' or 'au:Hinton'" },
+          "max_results": { "type": "integer", "default": 5 },
+          "sortBy": { "type": "string", "default": "relevance", "description": "relevance|lastUpdatedDate|submittedDate" }
+        },
+        "required": ["search_query"]
+      },
+      "query_params": ["search_query", "max_results", "sortBy"]
+    }
+  ]
+}

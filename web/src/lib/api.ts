@@ -107,8 +107,9 @@ export async function fetchModels(provider: string): Promise<ModelMeta[]> {
   return res.json();
 }
 
-export async function fetchMemories(userId: string): Promise<MemoryFact[]> {
-  const res = await fetch(`${BASE_URL}/api/memories?user_id=${encodeURIComponent(userId)}`, { headers: headers() });
+export async function fetchMemories(userId: string, query?: string): Promise<MemoryFact[]> {
+  const q = query && query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+  const res = await fetch(`${BASE_URL}/api/memories?user_id=${encodeURIComponent(userId)}${q}`, { headers: headers() });
   return res.json();
 }
 
@@ -325,6 +326,41 @@ export async function searchConversations(userId: string, query: string) {
 
 export async function getUsageSummary(userId: string, days = 30) {
   const res = await fetch(`${BASE_URL}/api/usage?user_id=${encodeURIComponent(userId)}&days=${days}`);
+  return res.json();
+}
+
+// ---------------- System health (OmniRoute Health Dashboard-inspired) ----------------
+export interface SystemStatus {
+  status: "ok" | "degraded";
+  app: string;
+  version: string;
+  uptime_seconds: number;
+  store: { backend: "sqlite" | "postgresql"; reachable: boolean; error: string | null };
+  providers: { total: number; free_tier: number; keyless: number };
+  connectors: { total: number; enabled: number; tool_count: number };
+  skills: number;
+  default_provider: string;
+  embeddings_enabled: boolean;
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  const res = await fetch(`${BASE_URL}/api/system/status`, { headers: headers() });
+  if (!res.ok) throw new Error("Could not reach system status endpoint");
+  return res.json();
+}
+
+// ---------------- Artifacts / workspace files (Open Design artifact-tree-inspired) ----------------
+export interface WorkspaceFile {
+  name: string;
+  kind: "workspace" | "exports";
+  size_bytes: number;
+  modified_at: number;
+  download_url: string;
+}
+
+export async function fetchWorkspaceFiles(sessionId: string): Promise<WorkspaceFile[]> {
+  const res = await fetch(`${BASE_URL}/api/workspace/${encodeURIComponent(sessionId)}/files`, { headers: headers() });
+  if (!res.ok) return [];
   return res.json();
 }
 

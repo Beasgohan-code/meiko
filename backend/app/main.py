@@ -30,6 +30,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +41,7 @@ from .api.schemas import (
     ChatRequest,
     ConnectorManifestRequest,
     ConnectorToggleRequest,
+    MemoryCreateRequest,
     NewConversationRequest,
     PairingClaimRequest,
     PairingCreateRequest,
@@ -63,6 +65,8 @@ from .providers.model_catalog import list_models
 settings = get_settings()
 setup_logging(settings.LOG_LEVEL)
 logger = get_logger("meiko.api")
+
+_process_started_at = time.time()
 
 app = FastAPI(title="Meiko Agent API", version="2.0.0")
 
@@ -105,7 +109,19 @@ async def request_context_middleware(request: Request, call_next):
 async def on_startup() -> None:
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     await get_store().init()
-    logger.info("Meiko backend startup complete (data_dir=%s, default_provider=%s)", settings.DATA_DIR, settings.DEFAULT_PROVIDER)
+    backend = "postgresql" if getattr(settings, "DATABASE_URL", None) else "sqlite"
+    logger.info(
+        "Meiko backend startup complete (data_dir=%s, default_provider=%s, store=%s)",
+        settings.DATA_DIR, settings.DEFAULT_PROVIDER, backend,
+    )
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    store = get_store()
+    close = getattr(store, "close", None)
+    if close is not None:
+        await close()
 
 
 @app.get("/health")
@@ -122,6 +138,52 @@ async def health_ready():
         return {"status": "ready"}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"not ready: {e}")
+
+
+@app.get("/api/system/status")
+async def system_status():
+    """Lightweight health/observability snapshot for the web app's Health tab
+    (inspired by OmniRoute's Health Dashboard) — store backend, DB
+    reachability, provider/connector/skill counts, and process uptime.
+    Unlike OmniRoute this needs no separate metrics stack: it's a single
+    cheap endpoint that reuses data Meiko already tracks."""
+    db_ok = True
+    db_error = None
+    try:
+        store = get_store()
+        await store.list_conversations("__health_check__")
+    except Exception as e:  # noqa: BLE001
+        db_ok = False
+        db_error = str(e)
+
+    manager = get_connector_manager()
+    manifests = manager.list_manifests()
+    provider_metas = list_provider_meta()
+
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "app": settings.APP_NAME,
+        "version": app.version,
+        "uptime_seconds": round(time.time() - _process_started_at, 1),
+        "store": {
+            "backend": "postgresql" if getattr(settings, "DATABASE_URL", None) else "sqlite",
+            "reachable": db_ok,
+            "error": db_error,
+        },
+        "providers": {
+            "total": len(provider_metas),
+            "free_tier": sum(1 for p in provider_metas if p.free_tier),
+            "keyless": sum(1 for p in provider_metas if not p.requires_key),
+        },
+        "connectors": {
+            "total": len(manifests),
+            "enabled": sum(1 for m in manifests if m.enabled),
+            "tool_count": sum(len(m.actions) for m in manifests),
+        },
+        "skills": len(discover_skills()),
+        "default_provider": settings.DEFAULT_PROVIDER,
+        "embeddings_enabled": bool(getattr(settings, "EMBEDDINGS_PROVIDER", None)),
+    }
 
 
 @app.get("/api/providers")
@@ -162,6 +224,14 @@ async def get_skills():
         {"id": s.id, "name": s.name, "description": s.description, "triggers": s.triggers}
         for s in discover_skills()
     ]
+
+
+@app.get("/api/skills/{skill_id}")
+async def get_skill_detail(skill_id: str):
+    for s in discover_skills():
+        if s.id == skill_id:
+            return {"id": s.id, "name": s.name, "description": s.description, "triggers": s.triggers, "body": s.body}
+    raise HTTPException(status_code=404, detail=f"No skill named '{skill_id}'")
 
 
 # ---------------- Settings ----------------
@@ -315,9 +385,24 @@ async def get_usage(user_id: str = Query("default"), days: int = Query(30, ge=1,
 
 # ---------------- Persistent memory (Mira-style "what I remember about you") ----------------
 @app.get("/api/memories", dependencies=[Depends(require_api_key)])
-async def get_memories(user_id: str = Query("default")):
+async def get_memories(user_id: str = Query("default"), q: Optional[str] = Query(None)):
+    """List a user's remembered facts. Pass `q` for hybrid search (keyword +
+    optional semantic, see memory/embeddings.py) instead of the full list —
+    powers the CLI's `meiko memory search` and the Settings memory search box."""
     store = get_store()
+    if q:
+        return await store.search_memories(user_id, q)
     return await store.list_memories_full(user_id)
+
+
+@app.post("/api/memories", dependencies=[Depends(require_api_key)])
+async def add_memory(payload: MemoryCreateRequest):
+    """Manually add a memory fact (the agent also does this itself via the
+    `remember` tool mid-conversation) — powers `meiko memory add` in the CLI."""
+    store = get_store()
+    memory_id = await store.add_memory(payload.user_id, payload.fact)
+    await get_sync_hub().publish(payload.user_id, "memory_updated")
+    return {"id": memory_id}
 
 
 @app.delete("/api/memories/{memory_id}", dependencies=[Depends(require_api_key)])
@@ -387,6 +472,40 @@ async def upload_file(session_id: str = Query(...), file: UploadFile = File(...)
         b64 = base64.b64encode(content).decode()
         result["data_url"] = f"data:{mime};base64,{b64}"
     return result
+
+
+@app.get("/api/workspace/{session_id}/files", dependencies=[Depends(require_api_key)])
+async def list_workspace_files(session_id: str):
+    """List every file Meiko has generated in a session's sandboxed workspace
+    and exports folder — powers the web app's Artifacts panel (inspired by
+    Open Design's artifact tree: every generated file, not just the last
+    one, stays visible and downloadable alongside the chat)."""
+    safe_session = Path(session_id).name
+    roots = [
+        ("workspace", Path(settings.DATA_DIR) / "workspaces" / safe_session),
+        ("exports", Path(settings.DATA_DIR) / "exports" / safe_session),
+    ]
+    files: list[dict] = []
+    for kind, root in roots:
+        if not root.exists():
+            continue
+        for p in sorted(root.rglob("*")):
+            if not p.is_file():
+                continue
+            try:
+                rel = p.relative_to(root)
+            except ValueError:
+                continue
+            stat = p.stat()
+            files.append({
+                "name": str(rel),
+                "kind": kind,
+                "size_bytes": stat.st_size,
+                "modified_at": stat.st_mtime,
+                "download_url": f"/api/download/{safe_session}/{p.name}",
+            })
+    files.sort(key=lambda f: f["modified_at"], reverse=True)
+    return files
 
 
 @app.get("/api/download/{session_id}/{filename}", dependencies=[Depends(require_api_key)])

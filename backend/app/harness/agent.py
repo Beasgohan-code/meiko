@@ -323,7 +323,14 @@ class MeikoAgent:
                 data={
                     "text": assistant_text,
                     "finish_reason": finish_reason,
-                    "stats": {"steps": stats.steps, "tool_calls": stats.tool_calls, "elapsed_seconds": stats.elapsed(), "provider_switches": stats.provider_switches},
+                    "stats": {
+                        "steps": stats.steps,
+                        "tool_calls": stats.tool_calls,
+                        "elapsed_seconds": stats.elapsed(),
+                        "provider_switches": stats.provider_switches,
+                        "provider": providers[active_idx][0],
+                        "model": self.model if providers[active_idx][0] == self.provider_id else None,
+                    },
                 },
             )
             return
@@ -335,6 +342,13 @@ class MeikoAgent:
             data={
                 "text": "I reached my maximum reasoning steps for this turn. Here's what I have so far.",
                 "finish_reason": "max_steps",
-                "stats": {"steps": stats.steps, "tool_calls": stats.tool_calls, "elapsed_seconds": stats.elapsed(), "provider_switches": stats.provider_switches},
+                "stats": {
+                    "steps": stats.steps,
+                    "tool_calls": stats.tool_calls,
+                    "elapsed_seconds": stats.elapsed(),
+                    "provider_switches": stats.provider_switches,
+                    "provider": providers[active_idx][0] if active_idx < len(providers) else self.provider_id,
+                    "model": self.model,
+                },
             },
         )

@@ -20,6 +20,23 @@ jobs:
       run:
         working-directory: backend
 
+    services:
+      # Used by tests/test_postgres_store.py to exercise the real PostgreSQL
+      # persistence backend (DATABASE_URL) end-to-end, not just SQLite.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: meiko
+          POSTGRES_PASSWORD: meiko
+          POSTGRES_DB: meiko_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meiko"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,8 +58,13 @@ jobs:
       - name: Import smoke test (app must build without a running server)
         run: python -c "from app.main import app; print('Meiko backend imported OK with', len(app.routes), 'routes')"
 
-      - name: Run pytest suite
+      - name: Run pytest suite (SQLite backend)
         run: python -m pytest -v
+
+      - name: Run pytest suite (PostgreSQL backend)
+        env:
+          MEIKO_TEST_DATABASE_URL: postgresql://meiko:meiko@localhost:5432/meiko_test
+        run: python -m pytest tests/test_postgres_store.py -v
 
       - name: Build Docker image
         run: docker build -t meiko-backend:ci .

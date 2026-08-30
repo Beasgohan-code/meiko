@@ -19,6 +19,15 @@ export interface Citation {
   via: string;
 }
 
+export interface RunInfo {
+  provider?: string;
+  model?: string;
+  steps?: number;
+  toolCalls?: number;
+  elapsedSeconds?: number;
+  providerSwitches?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -29,6 +38,7 @@ export interface ChatMessage {
   plan?: PlanTask[];
   citations?: Citation[];
   providerNotices?: string[];
+  runInfo?: RunInfo;
 }
 
 interface MeikoState {
@@ -58,6 +68,7 @@ interface MeikoState {
   updatePlan: (assistantId: string, tasks: PlanTask[]) => void;
   setCitations: (assistantId: string, citations: Citation[]) => void;
   addProviderNotice: (assistantId: string, notice: string) => void;
+  setRunInfo: (assistantId: string, info: RunInfo) => void;
   loadMessages: (conversationId: string, rows: { role: string; content: string }[]) => void;
 }
 
@@ -156,6 +167,11 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
       messages: s.messages.map((m) =>
         m.id === assistantId ? { ...m, providerNotices: [...(m.providerNotices || []), notice] } : m
       ),
+    })),
+
+  setRunInfo: (assistantId, info) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === assistantId ? { ...m, runInfo: info } : m)),
     })),
 
   loadMessages: (conversationId, rows) =>

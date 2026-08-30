@@ -1,0 +1,26 @@
+{
+  "id": "currency",
+  "name": "Currency Exchange",
+  "description": "Live currency exchange rate conversion (free, keyless, official European Central Bank rates via Frankfurter).",
+  "base_url": "https://api.frankfurter.app",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "currency_convert",
+      "description": "Get the latest exchange rate between two currencies (e.g. USD to INR).",
+      "method": "GET",
+      "path": "/latest",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "description": "3-letter source currency code, e.g. USD" },
+          "to": { "type": "string", "description": "3-letter target currency code, e.g. INR" },
+          "amount": { "type": "number", "default": 1 }
+        },
+        "required": ["from", "to"]
+      },
+      "query_params": ["from", "to", "amount"]
+    }
+  ]
+}

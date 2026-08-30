@@ -1,0 +1,24 @@
+{
+  "id": "pypi",
+  "name": "PyPI",
+  "description": "Look up Python package metadata (latest version, description, dependencies) — free, keyless, official PyPI JSON API.",
+  "base_url": "https://pypi.org/pypi",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "pypi_package_info",
+      "description": "Get metadata for a PyPI package: latest version, summary, homepage, license, requires_python.",
+      "method": "GET",
+      "path": "/{package}/json",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "package": { "type": "string", "description": "PyPI package name, e.g. 'requests'" }
+        },
+        "required": ["package"]
+      },
+      "path_params": ["package"]
+    }
+  ]
+}

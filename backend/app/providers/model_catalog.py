@@ -253,6 +253,51 @@ MISTRAL_MODELS: list[ModelMeta] = [
     ModelMeta(id="mistral-large-latest", display_name="Mistral Large", reasoning=True, context_window="128K", good_for=["complex reasoning"], tag="flagship"),
 ]
 
+MODELSCOPE_MODELS: list[ModelMeta] = [
+    ModelMeta(id="deepseek-ai/DeepSeek-V4-Pro", display_name="DeepSeek V4 Pro", family="DeepSeek", reasoning=True, context_window="1M", good_for=["coding", "deep reasoning"], tag="flagship"),
+    ModelMeta(id="deepseek-ai/DeepSeek-V4-Flash-0731", display_name="DeepSeek V4 Flash", family="DeepSeek", reasoning=True, context_window="1M", good_for=["fast agentic tool use"], tag="fast"),
+    ModelMeta(id="Qwen/Qwen3.5-397B-A17B", display_name="Qwen 3.5 397B", family="Qwen", reasoning=True, context_window="256K", good_for=["flagship reasoning"], tag="flagship"),
+    ModelMeta(id="Qwen/Qwen3-Coder-30B-A3B-Instruct", display_name="Qwen3 Coder 30B", family="Qwen", context_window="128K", good_for=["coding"], tag="coding"),
+    ModelMeta(id="MiniMax/MiniMax-M3", display_name="MiniMax M3", family="MiniMax", reasoning=True, context_window="1M", good_for=["long context agentic chat"], tag="default"),
+    ModelMeta(id="mistralai/Mistral-Large-Instruct-2407", display_name="Mistral Large", family="Mistral", context_window="128K", good_for=["general chat"]),
+]
+
+CLOUDFLARE_MODELS: list[ModelMeta] = [
+    ModelMeta(id="@cf/meta/llama-3.1-8b-instruct", display_name="Llama 3.1 8B (Cloudflare)", context_window="128K", good_for=["fast, no-card-required chat"], tag="default"),
+    ModelMeta(id="@cf/meta/llama-3.3-70b-instruct-fp8-fast", display_name="Llama 3.3 70B Fast", context_window="24K", good_for=["general chat"], tag="fast"),
+    ModelMeta(id="@cf/qwen/qwen2.5-coder-32b-instruct", display_name="Qwen2.5 Coder 32B", context_window="32K", good_for=["coding"], tag="coding"),
+    ModelMeta(id="@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", display_name="DeepSeek R1 Distill 32B", reasoning=True, context_window="80K", good_for=["reasoning"]),
+]
+
+LLM7_MODELS: list[ModelMeta] = [
+    # "turbo" tier — verified working with zero API key/signup (as of 2026-08).
+    ModelMeta(id="codestral-latest", display_name="Codestral", family="Mistral", good_for=["coding", "keyless default"], tag="default"),
+    ModelMeta(id="gpt-oss", display_name="GPT-OSS (Turbo)", family="OpenAI-OSS", reasoning=True, good_for=["fast reasoning"], tag="reasoning"),
+    ModelMeta(id="meta-Llama-3.1-8B-Instruct-Turbo", display_name="Llama 3.1 8B Turbo", family="Meta", context_window="128K", good_for=["general chat"], tag="fast"),
+    ModelMeta(id="minimax-m2.7", display_name="MiniMax M2.7 (Turbo)", family="MiniMax", reasoning=True, context_window="180K", good_for=["general chat", "reasoning"]),
+    # "pro" tier — require a free token from token.llm7.io for higher limits/larger models.
+    ModelMeta(id="deepseek-v4-flash", display_name="DeepSeek V4 Flash (Pro, needs token)", family="DeepSeek", reasoning=True, context_window="1M", good_for=["fast reasoning"], tag="pro"),
+    ModelMeta(id="claude-sonnet-4-6", display_name="Claude Sonnet 4.6 proxy (Pro, needs token)", family="Anthropic", context_window="1M", good_for=["general chat"], tag="pro"),
+    ModelMeta(id="gpt-5.4", display_name="GPT-5.4 proxy (Pro, needs token)", family="OpenAI", reasoning=True, context_window="1M", good_for=["deep reasoning"], tag="pro"),
+]
+
+OVHCLOUD_MODELS: list[ModelMeta] = [
+    ModelMeta(id="Meta-Llama-3_3-70B-Instruct", display_name="Llama 3.3 70B", context_window="128K", good_for=["general chat"], tag="default"),
+    ModelMeta(id="gpt-oss-120b", display_name="GPT-OSS 120B", reasoning=True, good_for=["deep reasoning"], tag="flagship"),
+    ModelMeta(id="Qwen3-Coder-30B-A3B-Instruct", display_name="Qwen3 Coder 30B", good_for=["coding"], tag="coding"),
+    ModelMeta(id="Qwen2.5-VL-72B-Instruct", display_name="Qwen2.5 VL 72B", vision=True, good_for=["vision"], tag="vision"),
+]
+
+SAMBANOVA_MODELS: list[ModelMeta] = [
+    ModelMeta(id="Meta-Llama-3.3-70B-Instruct", display_name="Llama 3.3 70B (SambaNova)", context_window="128K", good_for=["very fast inference"], tag="fast"),
+    ModelMeta(id="DeepSeek-V3.1", display_name="DeepSeek V3.1", reasoning=True, context_window="128K", good_for=["reasoning"], tag="default"),
+]
+
+COHERE_MODELS: list[ModelMeta] = [
+    ModelMeta(id="command-r7b-12-2024", display_name="Command R7B", context_window="128K", good_for=["fast general chat"], tag="default"),
+    ModelMeta(id="command-r-plus-08-2024", display_name="Command R+", reasoning=True, context_window="128K", good_for=["complex reasoning, RAG"], tag="flagship"),
+]
+
 MODEL_CATALOG: dict[str, list[ModelMeta]] = {
     "nvidia": NVIDIA_MODELS,
     "gemini": GEMINI_MODELS,
@@ -263,6 +308,12 @@ MODEL_CATALOG: dict[str, list[ModelMeta]] = {
     "cerebras": CEREBRAS_MODELS,
     "huggingface": HUGGINGFACE_MODELS,
     "mistral": MISTRAL_MODELS,
+    "modelscope": MODELSCOPE_MODELS,
+    "cloudflare": CLOUDFLARE_MODELS,
+    "llm7": LLM7_MODELS,
+    "ovhcloud": OVHCLOUD_MODELS,
+    "sambanova": SAMBANOVA_MODELS,
+    "cohere": COHERE_MODELS,
 }
 
 

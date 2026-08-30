@@ -1,0 +1,25 @@
+{
+  "id": "crossref",
+  "name": "Crossref",
+  "description": "Look up academic papers, journal articles, and DOIs across all publishers (free, keyless, official Crossref REST API).",
+  "base_url": "https://api.crossref.org",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "crossref_search_works",
+      "description": "Search scholarly works (papers, articles) by title/keywords. Returns titles, authors, DOI, publisher, and year.",
+      "method": "GET",
+      "path": "/works",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search terms, e.g. paper title or topic" },
+          "rows": { "type": "integer", "default": 5 }
+        },
+        "required": ["query"]
+      },
+      "query_params": ["query", "rows"]
+    }
+  ]
+}

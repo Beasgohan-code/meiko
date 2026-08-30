@@ -118,6 +118,66 @@ PROVIDER_CATALOG: list[ProviderMeta] = [
         key_help_url="https://console.mistral.ai/api-keys",
         description="Mistral's free experimental tier for their open-weight models.",
     ),
+    ProviderMeta(
+        id="modelscope",
+        display_name="ModelScope",
+        default_base_url="https://api-inference.modelscope.cn/v1",
+        default_model="deepseek-ai/DeepSeek-V4-Pro",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://modelscope.cn/my/myaccesstoken",
+        description="Alibaba ModelScope's free-tier hosted inference — 50+ open models incl. DeepSeek V4, Qwen3.5, MiniMax M3.",
+    ),
+    ProviderMeta(
+        id="cloudflare",
+        display_name="Cloudflare Workers AI",
+        default_base_url="https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+        default_model="@cf/meta/llama-3.1-8b-instruct",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://dash.cloudflare.com/profile/api-tokens",
+        description="Cloudflare's free, no-credit-card-required Workers AI tier. Base URL needs your account id (paste as `accountid:apitoken` in the key field).",
+    ),
+    ProviderMeta(
+        id="llm7",
+        display_name="LLM7.io",
+        default_base_url="https://api.llm7.io/v1",
+        default_model="codestral-latest",
+        requires_key=False,
+        free_tier=True,
+        key_help_url="https://token.llm7.io",
+        description="Keyless free aggregator — 'turbo' tier models (Codestral, GPT-OSS, Llama 3.1, MiniMax) work with zero signup; a free token from token.llm7.io unlocks the larger 'pro' tier models (Claude/DeepSeek/GPT-5 proxies) and higher limits.",
+    ),
+    ProviderMeta(
+        id="ovhcloud",
+        display_name="OVHcloud AI Endpoints",
+        default_base_url="https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+        default_model="Meta-Llama-3_3-70B-Instruct",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog/",
+        description="OVHcloud's free-tier EU-hosted inference endpoints (Llama, Mistral, Qwen, gpt-oss and more).",
+    ),
+    ProviderMeta(
+        id="sambanova",
+        display_name="SambaNova Cloud",
+        default_base_url="https://api.sambanova.ai/v1",
+        default_model="Meta-Llama-3.3-70B-Instruct",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://cloud.sambanova.ai/apis",
+        description="SambaNova's free-tier wafer-scale inference — very fast Llama/DeepSeek/Qwen serving.",
+    ),
+    ProviderMeta(
+        id="cohere",
+        display_name="Cohere",
+        default_base_url="https://api.cohere.ai/compatibility/v1",
+        default_model="command-r7b-12-2024",
+        requires_key=True,
+        free_tier=True,
+        key_help_url="https://dashboard.cohere.com/api-keys",
+        description="Cohere's free trial-key tier via their OpenAI-compatible endpoint (Command R family).",
+    ),
 ]
 
 _CATALOG_BY_ID = {p.id: p for p in PROVIDER_CATALOG}
@@ -134,17 +194,16 @@ def list_provider_meta() -> list[ProviderMeta]:
 # Ordered fallback preference per primary provider: if the primary fails
 # (rate-limited, retired model, connection error), Meiko tries these next,
 # provided the user has a key configured for them (or they're keyless/local).
+_ALL_FALLBACKS = [
+    "groq", "nvidia", "cerebras", "openrouter", "gemini",
+    "modelscope", "llm7", "ovhcloud", "sambanova", "cohere",
+    "huggingface", "mistral", "cloudflare", "ollama",
+]
+
 _FALLBACK_CHAINS: dict[str, list[str]] = {
-    "nvidia": ["groq", "cerebras", "openrouter", "gemini", "huggingface", "mistral", "ollama"],
-    "gemini": ["groq", "nvidia", "openrouter", "cerebras", "ollama"],
-    "openrouter": ["groq", "nvidia", "cerebras", "gemini", "ollama"],
-    "groq": ["cerebras", "nvidia", "openrouter", "gemini", "ollama"],
-    "cerebras": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
-    "huggingface": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
-    "mistral": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
-    "openai": ["groq", "nvidia", "openrouter", "gemini", "ollama"],
-    "ollama": [],  # local is already the last resort; no further fallback
+    pid: [p for p in _ALL_FALLBACKS if p != pid] for pid, _ in [(p.id, p) for p in PROVIDER_CATALOG]
 }
+_FALLBACK_CHAINS["ollama"] = []  # local is already the last resort; no further fallback
 
 
 def fallback_chain(provider_id: str) -> list[str]:
@@ -176,6 +235,12 @@ def build_provider(
         "cerebras": getattr(settings, "CEREBRAS_API_KEY", None),
         "huggingface": getattr(settings, "HUGGINGFACE_API_KEY", None),
         "mistral": getattr(settings, "MISTRAL_API_KEY", None),
+        "modelscope": getattr(settings, "MODELSCOPE_API_KEY", None),
+        "cloudflare": getattr(settings, "CLOUDFLARE_API_KEY", None),
+        "llm7": getattr(settings, "LLM7_API_KEY", None),
+        "ovhcloud": getattr(settings, "OVHCLOUD_API_KEY", None),
+        "sambanova": getattr(settings, "SAMBANOVA_API_KEY", None),
+        "cohere": getattr(settings, "COHERE_API_KEY", None),
     }
     env_base_map = {
         "nvidia": settings.NVIDIA_BASE_URL,
@@ -187,15 +252,31 @@ def build_provider(
         "cerebras": "https://api.cerebras.ai/v1",
         "huggingface": "https://router.huggingface.co/v1",
         "mistral": "https://api.mistral.ai/v1",
+        "modelscope": "https://api-inference.modelscope.cn/v1",
+        "llm7": "https://api.llm7.io/v1",
+        "ovhcloud": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+        "sambanova": "https://api.sambanova.ai/v1",
+        "cohere": "https://api.cohere.ai/compatibility/v1",
     }
 
     api_key = override_api_key or env_key_map.get(provider_id)
     base_url = override_base_url or env_base_map.get(provider_id) or meta.default_base_url
     model = override_model or (settings.DEFAULT_MODEL if provider_id == settings.DEFAULT_PROVIDER else meta.default_model)
 
+    # Cloudflare Workers AI bakes the account id into the URL path. Since the
+    # Settings UI only has one "API key" field per provider, we accept the
+    # key in `account_id:api_token` shorthand and split it here so users
+    # don't need a second input box just for this one provider.
+    if provider_id == "cloudflare" and api_key and ":" in api_key and "{account_id}" in base_url:
+        account_id, _, real_token = api_key.partition(":")
+        base_url = base_url.replace("{account_id}", account_id)
+        api_key = real_token
+
     config = ProviderConfig(api_key=api_key, base_url=base_url, model=model)
 
     if provider_id == "gemini":
         return GeminiProvider(config)
-    # nvidia / openrouter / groq / openai / ollama all speak OpenAI-compatible API
+    # All other providers (nvidia, openrouter, groq, openai, ollama, cerebras,
+    # huggingface, mistral, modelscope, cloudflare, llm7, ovhcloud, sambanova,
+    # cohere) speak an OpenAI-compatible /chat/completions API.
     return OpenAICompatibleProvider(config)

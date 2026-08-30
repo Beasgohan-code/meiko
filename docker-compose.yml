@@ -11,6 +11,31 @@ services:
       - ./backend/.env
     volumes:
       - meiko-data:/app/data
+    # Uncomment to run against the `postgres` service below instead of the
+    # default zero-config SQLite file (recommended once you have more than
+    # one backend replica, or just want a "real" database):
+    # environment:
+    #   - DATABASE_URL=postgresql://meiko:meiko@postgres:5432/meiko
+    # depends_on:
+    #   - postgres
+
+  # Optional PostgreSQL backend — only started if you `docker compose up
+  # postgres` explicitly or reference it via `depends_on` above. Meiko works
+  # perfectly well without this (SQLite is the zero-config default); this is
+  # here for people who want Postgres's concurrency/tooling instead.
+  postgres:
+    image: postgres:17
+    container_name: meiko-postgres
+    restart: unless-stopped
+    profiles: ["postgres"]
+    environment:
+      - POSTGRES_USER=meiko
+      - POSTGRES_PASSWORD=meiko
+      - POSTGRES_DB=meiko
+    ports:
+      - "5432:5432"
+    volumes:
+      - meiko-postgres-data:/var/lib/postgresql/data
 
   telegram-bot:
     build: ./telegram-bot
@@ -36,3 +61,4 @@ services:
 
 volumes:
   meiko-data:
+  meiko-postgres-data:

@@ -1,0 +1,17 @@
+{
+  "id": "quotes",
+  "name": "Quotes",
+  "description": "Get inspirational/famous quotes (free, keyless, ZenQuotes API).",
+  "base_url": "https://zenquotes.io/api",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "random_quote",
+      "description": "Get a random famous/inspirational quote.",
+      "method": "GET",
+      "path": "/random",
+      "parameters": { "type": "object", "properties": {}, "required": [] }
+    }
+  ]
+}

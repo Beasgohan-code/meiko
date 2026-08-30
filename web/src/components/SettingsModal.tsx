@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { X, Github, Sparkles, Brain, Trash2, Copy, Check, Link2, Smartphone } from "lucide-react";
+import { X, Github, Sparkles, Brain, Trash2, Copy, Check, Link2, Smartphone, Activity, BarChart3, Database, Puzzle, Cpu } from "lucide-react";
 import {
   ConnectorMeta,
   MemoryFact,
   ModelMeta,
   ProviderMeta,
   SkillMeta,
+  SystemStatus,
   claimPairingCode,
   clearMemories,
   connectSyncSocket,
@@ -16,7 +17,9 @@ import {
   fetchModels,
   fetchProviders,
   fetchSkills,
+  fetchSystemStatus,
   getSyncStatus,
+  getUsageSummary,
   getUserSettings,
   toggleConnector,
   updateUserSettings,
@@ -39,12 +42,15 @@ const MODEL_TAG_LABEL: Record<string, string> = {
 export default function SettingsModal({ onClose }: Props) {
   const { userId, provider, model, setProvider, setUserId } = useMeikoStore();
   const { t } = useI18n();
-  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "memory" | "persona" | "sync">("providers");
+  const [tab, setTab] = useState<
+    "providers" | "connectors" | "skills" | "memory" | "persona" | "sync" | "usage" | "health"
+  >("providers");
   const [providers, setProviders] = useState<ProviderMeta[]>([]);
   const [models, setModels] = useState<ModelMeta[]>([]);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [skills, setSkills] = useState<SkillMeta[]>([]);
   const [memories, setMemories] = useState<MemoryFact[]>([]);
+  const [memorySearch, setMemorySearch] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [activeProvider, setActiveProvider] = useState(provider || "nvidia");
   const [activeModel, setActiveModel] = useState(model || "");
@@ -58,6 +64,10 @@ export default function SettingsModal({ onClose }: Props) {
   const [syncStatus, setSyncStatus] = useState<string>("");
   const [connectedDevices, setConnectedDevices] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [usage, setUsage] = useState<any>(null);
+  const [usageDays, setUsageDays] = useState(30);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [systemStatusError, setSystemStatusError] = useState<string>("");
 
   useEffect(() => {
     fetchProviders().then(setProviders);
@@ -76,6 +86,20 @@ export default function SettingsModal({ onClose }: Props) {
   useEffect(() => {
     fetchModels(activeProvider).then(setModels);
   }, [activeProvider]);
+
+  useEffect(() => {
+    if (tab === "usage") {
+      getUsageSummary(userId, usageDays).then(setUsage).catch(() => setUsage(null));
+    }
+    if (tab === "health") {
+      fetchSystemStatus()
+        .then((s) => {
+          setSystemStatus(s);
+          setSystemStatusError("");
+        })
+        .catch(() => setSystemStatusError("Could not reach the backend's system status endpoint."));
+    }
+  }, [tab, userId, usageDays]);
 
   // Live sync: reflect settings/memory changes made from another linked
   // device (or the pairing count changing) while this modal is open.
@@ -97,6 +121,11 @@ export default function SettingsModal({ onClose }: Props) {
     });
     return () => conn.close();
   }, [userId]);
+
+  const handleMemorySearch = (value: string) => {
+    setMemorySearch(value);
+    fetchMemories(userId, value).then(setMemories).catch(() => {});
+  };
 
   const handleDeleteMemory = async (id: string) => {
     await deleteMemory(id);
@@ -206,6 +235,12 @@ export default function SettingsModal({ onClose }: Props) {
           </button>
           <button className={`tab-btn ${tab === "sync" ? "active" : ""}`} onClick={() => setTab("sync")}>
             {t("sync")}
+          </button>
+          <button className={`tab-btn ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>
+            <BarChart3 size={13} style={{ marginRight: 5, verticalAlign: -2 }} /> Usage
+          </button>
+          <button className={`tab-btn ${tab === "health" ? "active" : ""}`} onClick={() => setTab("health")}>
+            <Activity size={13} style={{ marginRight: 5, verticalAlign: -2 }} /> Health
           </button>
         </div>
 
@@ -372,9 +407,18 @@ export default function SettingsModal({ onClose }: Props) {
           <div>
             <p className="field-hint" style={{ marginBottom: 10 }}>
               Meiko saves durable facts about you across sessions (preferences, ongoing projects, etc.) using the
-              <code> remember</code> tool. Review or clear what it knows here.
+              <code> remember</code> tool. Review, search, or clear what it knows here.
             </p>
-            {memories.length === 0 && <div className="field-hint">{t("noMemories")}</div>}
+            <input
+              type="text"
+              placeholder="Search memories…"
+              value={memorySearch}
+              onChange={(e) => handleMemorySearch(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            {memories.length === 0 && (
+              <div className="field-hint">{memorySearch ? "No memories match that search." : t("noMemories")}</div>
+            )}
             {memories.map((m) => (
               <div className="connector-row" key={m.id}>
                 <div className="meta">
@@ -494,6 +538,131 @@ export default function SettingsModal({ onClose }: Props) {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {tab === "usage" && (
+          <div>
+            <p className="field-hint" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <BarChart3 size={14} />
+              Every chat run is logged — provider, mode, tool calls, elapsed time, and errors — so you can see
+              exactly where your usage (and free-tier quota) is going.
+            </p>
+            <div className="row" style={{ marginBottom: 10 }}>
+              <span className="name">Window</span>
+              <select value={usageDays} onChange={(e) => setUsageDays(Number(e.target.value))} className="lang-select">
+                <option value={7}>Last 7 days</option>
+                <option value={30}>Last 30 days</option>
+                <option value={90}>Last 90 days</option>
+              </select>
+            </div>
+
+            {!usage && <div className="field-hint">Loading usage…</div>}
+
+            {usage && (
+              <>
+                <div className="provider-card" style={{ marginBottom: 10 }}>
+                  <div className="row">
+                    <span className="name">Totals ({usage.window_days}d)</span>
+                  </div>
+                  <div className="usage-stat-grid">
+                    <div className="usage-stat">
+                      <span className="usage-stat-value">{usage.totals?.total || 0}</span>
+                      <span className="usage-stat-label">Runs</span>
+                    </div>
+                    <div className="usage-stat">
+                      <span className="usage-stat-value">{usage.totals?.tool_calls || 0}</span>
+                      <span className="usage-stat-label">Tool calls</span>
+                    </div>
+                    <div className="usage-stat">
+                      <span className="usage-stat-value">{usage.totals?.errors || 0}</span>
+                      <span className="usage-stat-label">Errors</span>
+                    </div>
+                  </div>
+                </div>
+
+                {(usage.by_provider_mode || []).length === 0 ? (
+                  <div className="field-hint">No usage recorded in this window yet — send a message!</div>
+                ) : (
+                  <div className="provider-card">
+                    <div className="row">
+                      <span className="name">By provider · mode</span>
+                    </div>
+                    {usage.by_provider_mode.map((row: any, i: number) => (
+                      <div className="usage-row" key={i}>
+                        <span className="usage-row-label">
+                          {row.provider} <span className="field-hint">· {row.mode}</span>
+                        </span>
+                        <span className="usage-row-stats">
+                          {row.n} run{row.n === 1 ? "" : "s"} · {row.tool_calls || 0} tools ·{" "}
+                          {Math.round(row.elapsed || 0)}s{row.errors ? ` · ${row.errors} err` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === "health" && (
+          <div>
+            <p className="field-hint" style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <Activity size={14} />
+              A live snapshot of the backend — database, providers, connectors, and skills — similar in spirit to
+              OmniRoute's Health Dashboard, without needing a separate monitoring stack.
+            </p>
+            {systemStatusError && <div className="field-hint">{systemStatusError}</div>}
+            {systemStatus && (
+              <>
+                <div className="provider-card" style={{ marginBottom: 10 }}>
+                  <div className="row">
+                    <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className={`health-dot ${systemStatus.status === "ok" ? "ok" : "bad"}`} />
+                      {systemStatus.app} v{systemStatus.version}
+                    </span>
+                    <span className="field-hint">up {Math.round(systemStatus.uptime_seconds)}s</span>
+                  </div>
+                </div>
+
+                <div className="provider-card" style={{ marginBottom: 10 }}>
+                  <div className="row">
+                    <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Database size={14} /> Store
+                    </span>
+                    <span className={`free-badge ${systemStatus.store.reachable ? "" : "bad-badge"}`}>
+                      {systemStatus.store.backend === "postgresql" ? "PostgreSQL" : "SQLite"} ·{" "}
+                      {systemStatus.store.reachable ? "reachable" : "unreachable"}
+                    </span>
+                  </div>
+                  {systemStatus.store.error && <div className="desc">{systemStatus.store.error}</div>}
+                </div>
+
+                <div className="usage-stat-grid" style={{ marginBottom: 10 }}>
+                  <div className="usage-stat">
+                    <Cpu size={13} />
+                    <span className="usage-stat-value">{systemStatus.providers.total}</span>
+                    <span className="usage-stat-label">Providers ({systemStatus.providers.free_tier} free)</span>
+                  </div>
+                  <div className="usage-stat">
+                    <Puzzle size={13} />
+                    <span className="usage-stat-value">{systemStatus.connectors.total}</span>
+                    <span className="usage-stat-label">Connectors ({systemStatus.connectors.tool_count} tools)</span>
+                  </div>
+                  <div className="usage-stat">
+                    <Sparkles size={13} />
+                    <span className="usage-stat-value">{systemStatus.skills}</span>
+                    <span className="usage-stat-label">Skills</span>
+                  </div>
+                </div>
+
+                <div className="field-hint">
+                  Default provider: <strong>{systemStatus.default_provider}</strong> · Semantic memory search:{" "}
+                  <strong>{systemStatus.embeddings_enabled ? "enabled" : "keyword-only"}</strong>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

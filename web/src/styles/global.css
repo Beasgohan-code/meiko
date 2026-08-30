@@ -442,6 +442,17 @@ button {
 }
 .citation-chip:hover { background: rgba(34,211,238,0.16); }
 
+/* ---------- Run telemetry badge (OmniRoute Health-Dashboard-inspired) ---------- */
+.run-telemetry {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 8px; font-size: 10.5px; color: var(--text-2);
+  background: rgba(148,163,184,0.08);
+  border: 1px solid rgba(148,163,184,0.15);
+  padding: 3px 9px; border-radius: 999px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.01em;
+}
+
 /* ---------- Composer ---------- */
 .composer-wrap {
   padding: 14px 20px 20px;
@@ -617,3 +628,74 @@ button {
 @media (max-width: 860px) {
   .mobile-menu-btn { display: flex; }
 }
+
+/* ---------- Artifacts panel (Open Design artifact-tree-inspired) ---------- */
+.artifacts-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 92px;
+  width: 320px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(16,16,28,0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  z-index: 30;
+  overflow: hidden;
+}
+.artifacts-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 600; color: var(--text-0);
+}
+.artifacts-list { overflow-y: auto; padding: 6px; }
+.artifact-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 8px; border-radius: 10px;
+  color: var(--text-1); text-decoration: none;
+}
+.artifact-row:hover { background: rgba(255,255,255,0.06); }
+.artifact-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.artifact-name { font-size: 12.5px; font-weight: 500; color: var(--text-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-sub { font-size: 10.5px; color: var(--text-2); }
+.artifact-download-icon { color: var(--text-2); flex-shrink: 0; }
+
+.artifacts-toggle-btn { position: relative; }
+.artifacts-badge {
+  position: absolute; top: -3px; right: -3px;
+  background: var(--violet-soft, #7c5cff); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1;
+  min-width: 14px; height: 14px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px;
+}
+
+@media (max-width: 860px) {
+  .artifacts-panel { right: 8px; left: 8px; width: auto; bottom: 84px; }
+}
+
+/* ---------- Usage / Health tabs (OmniRoute analytics/health-dashboard-inspired) ---------- */
+.usage-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.usage-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 6px; text-align: center;
+}
+.usage-stat-value { font-size: 18px; font-weight: 700; color: var(--text-0); }
+.usage-stat-label { font-size: 10px; color: var(--text-2); }
+.usage-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 2px; border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.usage-row:first-of-type { border-top: none; }
+.usage-row-label { font-weight: 600; color: var(--text-0); }
+.usage-row-stats { color: var(--text-2); font-size: 11px; }
+
+.health-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.health-dot.ok { background: var(--success, #4ade80); box-shadow: 0 0 6px var(--success, #4ade80); }
+.health-dot.bad { background: var(--danger, #ff6b6b); box-shadow: 0 0 6px var(--danger, #ff6b6b); }
+.bad-badge { background: rgba(255,107,107,0.15) !important; color: var(--danger, #ff6b6b) !important; }

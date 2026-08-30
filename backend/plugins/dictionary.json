@@ -1,0 +1,24 @@
+{
+  "id": "dictionary",
+  "name": "Dictionary",
+  "description": "English word definitions, phonetics, and synonyms (free, keyless, dictionaryapi.dev).",
+  "base_url": "https://api.dictionaryapi.dev/api/v2",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "dictionary_lookup",
+      "description": "Look up the definition, part of speech, phonetics, and example usage of an English word.",
+      "method": "GET",
+      "path": "/entries/en/{word}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "word": { "type": "string", "description": "The word to look up" }
+        },
+        "required": ["word"]
+      },
+      "path_params": ["word"]
+    }
+  ]
+}

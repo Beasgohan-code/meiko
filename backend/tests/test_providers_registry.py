@@ -47,3 +47,28 @@ def test_fallback_chain_never_includes_self():
 
 def test_fallback_chain_ollama_is_terminal():
     assert fallback_chain("ollama") == []
+
+
+def test_new_free_providers_registered():
+    ids = {m.id for m in list_provider_meta()}
+    for expected in ("modelscope", "cloudflare", "llm7", "ovhcloud", "sambanova", "cohere"):
+        assert expected in ids
+
+
+def test_build_provider_new_free_providers_return_openai_compatible():
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    for provider_id in ("modelscope", "llm7", "ovhcloud", "sambanova", "cohere"):
+        provider = build_provider(provider_id, get_settings(), override_api_key="fake-key")
+        assert isinstance(provider, OpenAICompatibleProvider)
+
+
+def test_cloudflare_account_id_token_split():
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    provider = build_provider("cloudflare", get_settings(), override_api_key="myaccount:mytoken")
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert "myaccount" in provider.base_url
+    assert provider.config.api_key == "mytoken"

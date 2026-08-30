@@ -1,0 +1,28 @@
+{
+  "id": "stackoverflow",
+  "name": "Stack Overflow",
+  "description": "Search Stack Overflow questions and answers (free, keyless, official Stack Exchange API).",
+  "base_url": "https://api.stackexchange.com/2.3",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "stackoverflow_search",
+      "description": "Search Stack Overflow for questions matching a query, ranked by relevance.",
+      "method": "GET",
+      "path": "/search/advanced",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": { "type": "string", "description": "Search terms" },
+          "site": { "type": "string", "default": "stackoverflow" },
+          "pagesize": { "type": "integer", "default": 5 },
+          "sort": { "type": "string", "default": "relevance" },
+          "order": { "type": "string", "default": "desc" }
+        },
+        "required": ["q"]
+      },
+      "query_params": ["q", "site", "pagesize", "sort", "order"]
+    }
+  ]
+}

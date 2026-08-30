@@ -1,0 +1,41 @@
+{
+  "id": "crypto",
+  "name": "Crypto Prices",
+  "description": "Live cryptocurrency prices and market data (free, keyless, CoinGecko public API).",
+  "base_url": "https://api.coingecko.com/api/v3",
+  "auth": { "type": "none" },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "crypto_price",
+      "description": "Get the current price of one or more cryptocurrencies in a given fiat currency.",
+      "method": "GET",
+      "path": "/simple/price",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ids": { "type": "string", "description": "Comma-separated CoinGecko ids, e.g. 'bitcoin,ethereum'" },
+          "vs_currencies": { "type": "string", "default": "usd" }
+        },
+        "required": ["ids"]
+      },
+      "query_params": ["ids", "vs_currencies"]
+    },
+    {
+      "name": "crypto_market_top",
+      "description": "Get the current top cryptocurrencies ranked by market cap.",
+      "method": "GET",
+      "path": "/coins/markets",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "vs_currency": { "type": "string", "default": "usd" },
+          "per_page": { "type": "integer", "default": 10 },
+          "order": { "type": "string", "default": "market_cap_desc" }
+        },
+        "required": []
+      },
+      "query_params": ["vs_currency", "per_page", "order"]
+    }
+  ]
+}

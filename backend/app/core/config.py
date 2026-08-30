@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     HUGGINGFACE_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
 
+    # --- Additional free-tier providers (from awesome-freellm-apis) ---
+    MODELSCOPE_API_KEY: Optional[str] = None
+    CLOUDFLARE_API_KEY: Optional[str] = None  # "account_id:api_token" shorthand, see registry.build_provider
+    LLM7_API_KEY: Optional[str] = None
+    OVHCLOUD_API_KEY: Optional[str] = None
+    SAMBANOVA_API_KEY: Optional[str] = None
+    COHERE_API_KEY: Optional[str] = None
+
     # --- Web search tool (optional keys, free fallback via DuckDuckGo works without keys) ---
     TAVILY_API_KEY: Optional[str] = None
 
@@ -69,6 +77,14 @@ class Settings(BaseSettings):
     # --- Storage ---
     DATA_DIR: str = "./data"
     DB_PATH: str = "./data/meiko.db"
+    # Optional: set to a postgresql:// / postgresql+asyncpg:// URL to switch
+    # the entire persistence layer from the zero-config SQLite file store to
+    # PostgreSQL (see memory/postgres_store.py). Leave unset to keep SQLite.
+    DATABASE_URL: Optional[str] = None
+
+    # --- Optional semantic memory search (blended with keyword search) ---
+    EMBEDDINGS_PROVIDER: Optional[str] = None
+    EMBEDDINGS_MODEL: str = "nvidia/nv-embedqa-e5-v5"
 
     # --- Agent behaviour ---
     MAX_AGENT_STEPS: int = 20  # hard safety ceiling; individual modes can request fewer

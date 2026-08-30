@@ -8,7 +8,11 @@ async def test_models_endpoint_default_nvidia(app_client):
 
 
 async def test_models_endpoint_per_provider(app_client):
-    for provider in ["nvidia", "gemini", "groq", "openrouter", "openai", "ollama", "cerebras", "huggingface", "mistral"]:
+    providers = [
+        "nvidia", "gemini", "groq", "openrouter", "openai", "ollama", "cerebras", "huggingface", "mistral",
+        "modelscope", "cloudflare", "llm7", "ovhcloud", "sambanova", "cohere",
+    ]
+    for provider in providers:
         resp = await app_client.get("/api/models", params={"provider": provider})
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
@@ -35,6 +39,33 @@ async def test_memories_lifecycle(app_client):
     assert resp.status_code == 200
     resp = await app_client.get("/api/memories", params={"user_id": "mem_user"})
     assert not any(m["id"] == mem_id for m in resp.json())
+
+
+async def test_add_memory_endpoint(app_client):
+    resp = await app_client.post("/api/memories", json={"user_id": "add_mem_user", "fact": "Prefers dark mode"})
+    assert resp.status_code == 200
+    assert "id" in resp.json()
+
+    resp = await app_client.get("/api/memories", params={"user_id": "add_mem_user"})
+    assert any(m["fact"] == "Prefers dark mode" for m in resp.json())
+
+
+async def test_skill_detail_endpoint_404_for_missing(app_client):
+    resp = await app_client.get("/api/skills/does-not-exist")
+    assert resp.status_code == 404
+
+
+async def test_memories_search_endpoint(app_client):
+    from app.memory.store import get_store
+
+    store = get_store()
+    await store.add_memory("search_user", "Favorite language is Python")
+    await store.add_memory("search_user", "Lives in Kerala")
+
+    resp = await app_client.get("/api/memories", params={"user_id": "search_user", "q": "Python"})
+    assert resp.status_code == 200
+    facts = [m["fact"] for m in resp.json()]
+    assert any("Python" in f for f in facts)
 
 
 async def test_settings_ui_language_roundtrip(app_client):

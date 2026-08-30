@@ -58,3 +58,8 @@ class PairingCreateRequest(BaseModel):
 
 class PairingClaimRequest(BaseModel):
     code: str = Field(..., min_length=4, max_length=12)
+
+
+class MemoryCreateRequest(BaseModel):
+    user_id: str = Field(default="default", max_length=128)
+    fact: str = Field(..., min_length=1, max_length=2000)

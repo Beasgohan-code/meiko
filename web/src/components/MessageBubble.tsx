@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Wrench, CheckCircle2, Circle, Loader2, Link2, ArrowRightLeft } from "lucide-react";
+import { Wrench, CheckCircle2, Circle, Loader2, Link2, ArrowRightLeft, Gauge } from "lucide-react";
 import { animateMessageIn, animateThinkingDots } from "../lib/animations";
 import type { ChatMessage } from "../lib/store";
 
@@ -88,6 +88,21 @@ function ToolTrace({ tools }: { tools: ChatMessage["tools"] }) {
   );
 }
 
+function RunTelemetry({ info }: { info?: ChatMessage["runInfo"] }) {
+  if (!info || !info.provider) return null;
+  const parts: string[] = [info.model ? `${info.provider} · ${info.model}` : info.provider];
+  if (typeof info.elapsedSeconds === "number") parts.push(`${info.elapsedSeconds.toFixed(1)}s`);
+  if (info.steps) parts.push(`${info.steps} step${info.steps === 1 ? "" : "s"}`);
+  if (info.toolCalls) parts.push(`${info.toolCalls} tool call${info.toolCalls === 1 ? "" : "s"}`);
+  if (info.providerSwitches) parts.push(`${info.providerSwitches} fallback${info.providerSwitches === 1 ? "" : "s"}`);
+  return (
+    <div className="run-telemetry" title="Which provider/model actually answered, and how long it took">
+      <Gauge size={11} />
+      {parts.join(" · ")}
+    </div>
+  );
+}
+
 function ThinkingIndicator() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -142,6 +157,7 @@ export default function MessageBubble({ message }: Props) {
           {message.error && <div className="error-text">⚠ {message.error}</div>}
         </div>
         {!isUser && <Citations citations={message.citations} />}
+        {!isUser && !message.streaming && <RunTelemetry info={message.runInfo} />}
       </div>
     </div>
   );
