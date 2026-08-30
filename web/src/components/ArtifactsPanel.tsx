@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { FileText, Image as ImageIcon, FileArchive, FileCode, Download, RefreshCw, X, FolderOpen, Eye, ExternalLink } from "lucide-react";
 import { WorkspaceFile, downloadUrl, fetchWorkspaceFiles, previewUrl } from "../lib/api";
 
@@ -62,7 +63,13 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
   }, [sessionId]);
 
   return (
-    <div className="artifacts-panel">
+    <motion.div
+      className="artifacts-panel"
+      initial={{ opacity: 0, y: 16, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 12, scale: 0.96 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+    >
       <div className="artifacts-header">
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <FolderOpen size={15} /> Artifacts
@@ -83,10 +90,21 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
             image, or zip up a project, and it'll show up here instantly.
           </div>
         )}
+        <AnimatePresence>
         {files.map((f) => {
           const Icon = iconFor(f.name);
           return (
-            <div key={f.name + f.kind} className="artifact-row" title={f.name} style={{ paddingRight: 4 }}>
+            <motion.div
+              key={f.name + f.kind}
+              className="artifact-row"
+              title={f.name}
+              style={{ paddingRight: 4 }}
+              layout
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.18 }}
+            >
               <Icon size={16} />
               <div className="artifact-meta">
                 <span className="artifact-name">{f.name}</span>
@@ -112,13 +130,28 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
               >
                 <Download size={13} className="artifact-download-icon" />
               </a>
-            </div>
+            </motion.div>
           );
         })}
+        </AnimatePresence>
       </div>
+      <AnimatePresence>
       {previewing && (
-        <div className="preview-overlay" onClick={() => setPreviewing(null)}>
-          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+        <motion.div
+          className="preview-overlay"
+          onClick={() => setPreviewing(null)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="preview-modal"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className="preview-modal-header">
               <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <Eye size={14} /> {previewing.name}
@@ -144,9 +177,10 @@ export default function ArtifactsPanel({ sessionId, onClose }: Props) {
               title={previewing.name}
               sandbox="allow-scripts allow-forms allow-popups allow-modals"
             />
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
-    </div>
+      </AnimatePresence>
+    </motion.div>
   );
 }

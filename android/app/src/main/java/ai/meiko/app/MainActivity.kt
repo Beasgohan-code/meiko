@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import ai.meiko.app.ui.MeikoViewModel
 import ai.meiko.app.ui.chat.MeikoApp
@@ -18,7 +20,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MeikoTheme {
+            val state by viewModel.state.collectAsState()
+            MeikoTheme(darkMode = state.darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MeikoColors.Bg0) {
                     MeikoApp(viewModel = viewModel)
                 }

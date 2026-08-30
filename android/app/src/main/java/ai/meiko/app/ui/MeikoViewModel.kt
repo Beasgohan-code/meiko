@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
 
@@ -52,6 +55,7 @@ data class MeikoUiState(
     val memories: List<MemoryFact> = emptyList(),
     val conversations: List<ConversationSummary> = emptyList(),
     val conversationId: String? = null,
+    val darkTheme: Boolean = true,
 )
 
 class MeikoViewModel(application: Application) : AndroidViewModel(application) {
@@ -76,6 +80,7 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
             val provider = prefs.provider()
             val model = prefs.model()
             val uiLanguage = prefs.uiLanguage()
+            val theme = prefs.theme()
             _state.value = _state.value.copy(
                 backendUrl = backendUrl,
                 mode = mode,
@@ -83,9 +88,17 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
                 provider = provider,
                 model = model,
                 uiLanguage = uiLanguage,
+                darkTheme = theme != "light",
             )
             refreshCatalogs()
         }
+    }
+
+    /** Light-mode toggle (Claude/Open-Design-inspired, matching the web app's theme switch). */
+    fun toggleTheme() {
+        val next = !_state.value.darkTheme
+        _state.value = _state.value.copy(darkTheme = next)
+        viewModelScope.launch { prefs.setTheme(if (next) "dark" else "light") }
     }
 
     private fun refreshCatalogs() {
@@ -229,6 +242,23 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun downloadUrl(filename: String): String = api.downloadUrl(sessionId, filename)
 
+    /** Upload an attachment (paperclip / share-sheet) into this session's workspace,
+     * then post a small confirmation message — mirrors the web app's onAttach flow. */
+    fun uploadFile(fileName: String, bytes: ByteArray, mimeType: String) {
+        val userMsgId = UUID.randomUUID().toString()
+        _state.value = _state.value.copy(
+            messages = _state.value.messages + ChatMessage(id = userMsgId, role = ChatRole.USER, content = "📎 Uploaded: $fileName"),
+        )
+        viewModelScope.launch {
+            val ok = api.uploadFile(sessionId, fileName, bytes, mimeType)
+            val replyId = UUID.randomUUID().toString()
+            val reply = if (ok) "Got your file **$fileName** — ask me anything about it!" else "Sorry, that upload failed — please try again."
+            _state.value = _state.value.copy(
+                messages = _state.value.messages + ChatMessage(id = replyId, role = ChatRole.ASSISTANT, content = reply),
+            )
+        }
+    }
+
     fun stopStreaming() {
         streamJob?.cancel()
         streamJob = null
@@ -266,10 +296,22 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
                 updateAssistant(assistantMsg.id) { it.copy(error = e.message ?: "Connection error", streaming = false) }
             }.collect { event ->
                 when (event.type) {
+                    "thinking" -> {
+                        val delta = event.data["text"]?.jsonPrimitive?.content ?: ""
+                        _state.value = _state.value.copy(orbState = OrbState.THINKING)
+                        updateAssistant(assistantMsg.id) {
+                            it.thinking += delta
+                            it.isThinking = true
+                            it
+                        }
+                    }
                     "token" -> {
                         val delta = event.data["text"]?.jsonPrimitive?.content ?: ""
                         _state.value = _state.value.copy(orbState = OrbState.SPEAKING)
-                        updateAssistant(assistantMsg.id) { it.copy(content = it.content + delta) }
+                        updateAssistant(assistantMsg.id) {
+                            it.isThinking = false
+                            it.copy(content = it.content + delta)
+                        }
                     }
                     "tool_call" -> {
                         _state.value = _state.value.copy(orbState = OrbState.TOOL)
@@ -277,6 +319,7 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
                         val id = event.data["id"]?.jsonPrimitive?.content ?: UUID.randomUUID().toString()
                         updateAssistant(assistantMsg.id) {
                             it.tools.add(ToolTrace(id = id, name = name))
+                            it.isThinking = false
                             it
                         }
                     }
@@ -334,6 +377,19 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     "final" -> {
                         finalText = event.data["text"]?.jsonPrimitive?.content ?: ""
+                        val stats = event.data["stats"] as? JsonObject
+                        if (stats != null) {
+                            val info = RunInfo(
+                                provider = stats["provider"]?.jsonPrimitive?.contentOrNull,
+                                model = stats["model"]?.jsonPrimitive?.contentOrNull,
+                                steps = stats["steps"]?.jsonPrimitive?.intOrNull,
+                                toolCalls = stats["tool_calls"]?.jsonPrimitive?.intOrNull,
+                                elapsedSeconds = stats["elapsed_seconds"]?.jsonPrimitive?.doubleOrNull,
+                                providerSwitches = stats["provider_switches"]?.jsonPrimitive?.intOrNull,
+                                tokensPerSecond = stats["tokens_per_second"]?.jsonPrimitive?.doubleOrNull,
+                            )
+                            updateAssistant(assistantMsg.id) { it.copy(runInfo = info, isThinking = false) }
+                        }
                     }
                     "error" -> {
                         val msg = event.data["message"]?.jsonPrimitive?.content ?: "Something went wrong"

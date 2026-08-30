@@ -28,6 +28,7 @@ class StreamChunk:
     tool_calls: Optional[list[dict[str, Any]]] = None
     finish_reason: Optional[str] = None
     raw: Optional[dict[str, Any]] = None
+    reasoning_delta: str = ""  # DeepSeek-R1/QwQ/o1-style "thinking" tokens, kept separate from the answer
 
 
 @dataclass

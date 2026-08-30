@@ -150,8 +150,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "✨ Want a fast prototype instead? Try /vibe — describe an app or site in plain language and get a "
         "working, live-previewable build back in one shot.\n\n"
         "Just send me a message to get started, or use the menu below.\n\n"
-        "*Commands:* /vibe /preview /mode /persona /providers /model /lang /memory /connectors /skills /github "
-        "/history /rename /usage /new /stop /help",
+        "*Commands:* /vibe /preview /study /mode /persona /providers /model /lang /memory /connectors /skills "
+        "/github /history /rename /usage /new /stop /help",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(buttons),
     )
@@ -174,6 +174,26 @@ async def cmd_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state["conversation_id"] = None
     state["session_id"] = str(uuid.uuid4())
     await update.message.reply_text("🆕 Started a fresh conversation. What's on your mind?")
+
+
+async def cmd_study(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """OmniTutor-style study session shortcut: flashcards + a one-question-at-a-
+    time graded quiz on any topic, via the study-buddy Skill."""
+    if not await _guard(update):
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /study <topic> — e.g. /study the French Revolution, or /study photosynthesis\n\n"
+            "I'll make you flashcards and quiz you one question at a time, OmniTutor-style. You can also "
+            "upload notes/a PDF first, then run /study to be quizzed on that document."
+        )
+        return
+    topic = " ".join(context.args)
+    await on_message_with_text(
+        update, context,
+        f"Let's do a study session on: {topic}. Use the study-buddy skill: give me flashcards, then quiz "
+        f"me one question at a time and grade my answers.",
+    )
 
 
 async def cmd_vibe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -729,6 +749,7 @@ async def _post_init(app: Application) -> None:
         BotCommand("mode", "Switch agent mode"),
         BotCommand("vibe", "✨ Vibe coding — rapid-prototype an app/site"),
         BotCommand("preview", "🔗 Get live preview links for generated apps"),
+        BotCommand("study", "🎓 Study Buddy — flashcards + graded quiz on any topic"),
         BotCommand("persona", "Switch persona"),
         BotCommand("providers", "Switch model provider"),
         BotCommand("model", "Pick a specific model (DeepSeek, Kimi, GLM, Qwen...)"),
@@ -759,6 +780,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("mode", cmd_mode))
     app.add_handler(CommandHandler("vibe", cmd_vibe))
     app.add_handler(CommandHandler("preview", cmd_preview))
+    app.add_handler(CommandHandler("study", cmd_study))
     app.add_handler(CommandHandler("persona", cmd_persona))
     app.add_handler(CommandHandler("providers", cmd_providers))
     app.add_handler(CommandHandler("model", cmd_model))

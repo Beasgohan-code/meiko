@@ -87,6 +87,16 @@ data class ToolTrace(
 
 enum class ChatRole { USER, ASSISTANT }
 
+data class RunInfo(
+    val provider: String? = null,
+    val model: String? = null,
+    val steps: Int? = null,
+    val toolCalls: Int? = null,
+    val elapsedSeconds: Double? = null,
+    val providerSwitches: Int? = null,
+    val tokensPerSecond: Double? = null,
+)
+
 data class ChatMessage(
     val id: String,
     val role: ChatRole,
@@ -98,4 +108,7 @@ data class ChatMessage(
     var citations: MutableList<Citation> = mutableListOf(),
     var providerNotices: MutableList<String> = mutableListOf(),
     var generatedImages: MutableList<String> = mutableListOf(),
+    var thinking: String = "",
+    var isThinking: Boolean = false,
+    var runInfo: RunInfo? = null,
 )

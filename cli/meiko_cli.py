@@ -597,6 +597,25 @@ def cmd_preview(client: MeikoClient, args) -> None:
 
 
 # --------------------------------------------------------------------------
+# Study Buddy — OmniTutor-style flashcards + graded quiz shortcut
+# --------------------------------------------------------------------------
+def cmd_study(client: MeikoClient, args) -> None:
+    prompt = (
+        f"Let's do a study session on: {args.topic}. Use the study-buddy skill: give me flashcards, "
+        f"then quiz me one question at a time and grade my answers."
+    )
+    out(f"[bold]🎓 Study session:[/] {args.topic}" if HAS_RICH else f"Study session: {args.topic}")
+    print()
+    for event in client.chat_stream(prompt, mode=args.mode, provider=args.provider):
+        etype = event.get("type")
+        if etype == "token":
+            print(event["text"], end="", flush=True)
+        elif etype == "error":
+            out(f"\n[Error] {event.get('message')}", style="red")
+    print()
+
+
+# --------------------------------------------------------------------------
 # argparse wiring
 # --------------------------------------------------------------------------
 def main() -> None:
@@ -706,6 +725,12 @@ def main() -> None:
     p_preview = sub.add_parser("preview", help="List live preview links for a session's generated HTML files")
     p_preview.add_argument("session_id")
     p_preview.set_defaults(func=cmd_preview)
+
+    p_study = sub.add_parser("study", help="Study Buddy — flashcards + one-question-at-a-time graded quiz on any topic (OmniTutor-style)")
+    p_study.add_argument("topic")
+    p_study.add_argument("--mode", default="autonomous")
+    p_study.add_argument("--provider", default=None)
+    p_study.set_defaults(func=cmd_study)
 
     args = parser.parse_args()
     client = MeikoClient(args.server, args.user, args.api_key)

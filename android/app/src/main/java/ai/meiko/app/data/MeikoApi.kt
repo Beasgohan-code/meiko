@@ -12,11 +12,15 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readUTF8Line
@@ -154,6 +158,28 @@ class MeikoApi(private var baseUrl: String, private var apiKey: String? = null) 
     }
 
     fun downloadUrl(sessionId: String, filename: String): String = "$baseUrl/api/download/$sessionId/$filename"
+
+    /** Uploads a file into the session workspace so Meiko can read/reason about it
+     * (mirrors the web app's drag-and-drop / paperclip attach). */
+    suspend fun uploadFile(sessionId: String, fileName: String, bytes: ByteArray, mimeType: String): Boolean {
+        return try {
+            val resp = client.submitFormWithBinaryData(
+                url = "$baseUrl/api/upload",
+                formData = formData {
+                    append("file", bytes, Headers.build {
+                        append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                        append(HttpHeaders.ContentType, mimeType)
+                    })
+                },
+            ) {
+                withAuth()
+                parameter("session_id", sessionId)
+            }
+            resp.status.value in 200..299
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     /**
      * Streams a chat turn via SSE (POST + chunked response), emitting one [AgentEvent] per

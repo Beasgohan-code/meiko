@@ -7,6 +7,15 @@
     <title>Meiko — Your Autonomous AI Agent</title>
     <meta name="description" content="Meiko is an open, pluggable AI agent with tools, memory, connectors, and agent modes — chat, research, code, and create." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Apply the saved theme before paint to avoid a dark->light flash.
+      (function () {
+        try {
+          var t = localStorage.getItem("meiko_theme") || "dark";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

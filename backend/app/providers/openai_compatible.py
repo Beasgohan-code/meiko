@@ -96,6 +96,16 @@ class OpenAICompatibleProvider(LLMProvider):
                         delta = choice.get("delta", {})
                         finish = choice.get("finish_reason")
                         content = delta.get("content") or ""
+                        # DeepSeek-R1/QwQ/Groq-style reasoning models stream their chain-of-thought
+                        # separately from the answer, under one of a few different key names
+                        # depending on the provider -- normalize them all to one field so the
+                        # harness/UI can show a Claude-style "Thinking" trace.
+                        reasoning = (
+                            delta.get("reasoning_content")
+                            or delta.get("reasoning")
+                            or delta.get("thinking")
+                            or ""
+                        )
                         tcs = delta.get("tool_calls")
                         if tcs:
                             for tc in tcs:
@@ -110,6 +120,8 @@ class OpenAICompatibleProvider(LLMProvider):
                                     slot["function"]["name"] += fn["name"]
                                 if fn.get("arguments"):
                                     slot["function"]["arguments"] += fn["arguments"]
+                        if reasoning:
+                            yield StreamChunk(reasoning_delta=reasoning, raw=obj)
                         if content:
                             yield StreamChunk(delta=content, raw=obj)
                         if finish:

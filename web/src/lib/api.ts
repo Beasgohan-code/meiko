@@ -8,6 +8,7 @@ export type AgentEventType =
   | "conversation_created"
   | "step"
   | "token"
+  | "thinking"
   | "tool_call"
   | "tool_result"
   | "plan_update"

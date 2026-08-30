@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, Sparkles, Globe, FolderOpen } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, Sparkles, Globe, FolderOpen, Sun, Moon, Command } from "lucide-react";
 import MeikoOrb from "./components/MeikoOrb";
 import Sidebar from "./components/Sidebar";
 import MessageBubble from "./components/MessageBubble";
 import Composer from "./components/Composer";
 import SettingsModal from "./components/SettingsModal";
 import ArtifactsPanel from "./components/ArtifactsPanel";
+import CommandPalette from "./components/CommandPalette";
 import { AgentEvent, AgentModeMeta, PersonaMeta, connectSyncSocket, fetchModes, fetchPersonas, fetchWorkspaceFiles, getConversationMessages, streamChat, uploadFile } from "./lib/api";
 import { useMeikoStore } from "./lib/store";
 import { animateHeroText, animateStagger } from "./lib/animations";
@@ -34,6 +36,8 @@ export default function App() {
     addUserMessage,
     startAssistantMessage,
     appendToken,
+    appendThinking,
+    setThinkingDone,
     addToolCall,
     updateToolResult,
     finishAssistantMessage,
@@ -45,6 +49,8 @@ export default function App() {
     addProviderNotice,
     setRunInfo,
     loadMessages,
+    theme,
+    toggleTheme,
   } = useMeikoStore();
 
   const [modes, setModes] = useState<AgentModeMeta[]>([]);
@@ -54,6 +60,7 @@ export default function App() {
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [artifactCount, setArtifactCount] = useState(0);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [orbState, setOrbState] = useState<"idle" | "thinking" | "speaking" | "tool">("idle");
   const { t, lang, setLang } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,6 +72,22 @@ export default function App() {
     fetchModes().then(setModes);
     fetchPersonas().then(setPersonas);
   }, []);
+
+  // Global command palette — Cmd/Ctrl+K (menus.ai / Arena / Raycast-style).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   // Poll for generated files so the Artifacts badge/count stays live even
   // without opening the panel (mirrors Open Design's always-visible
@@ -136,8 +159,32 @@ export default function App() {
     finishAssistantMessage(id);
   };
 
+  // Specific web-app slash-command: "/study <topic>" kicks off an OmniTutor-
+  // style flashcards + graded-quiz session via the study-buddy Skill —
+  // mirrors the Telegram bot's and CLI's /study command.
+  const handleStudyCommand = (raw: string): boolean => {
+    const match = raw.trim().match(/^\/study\b\s*(.*)$/i);
+    if (!match) return false;
+    const topic = match[1].trim();
+    if (!topic) {
+      addUserMessage(raw.trim());
+      finishAssistantMessageWithText(
+        "🎓 **Study Buddy** — usage: `/study <topic>` (e.g. `/study the French Revolution`). I'll build " +
+          "flashcards and quiz you one question at a time, grading as we go. You can also upload notes or a " +
+          "PDF first, then run `/study <topic>` to be quizzed on that document."
+      );
+      return true;
+    }
+    sendMessage(
+      `Let's do a study session on: ${topic}. Use the study-buddy skill: give me flashcards, then quiz me ` +
+        `one question at a time and grade my answers.`
+    );
+    return true;
+  };
+
   const sendMessage = async (text: string) => {
     if (handleVibeCommand(text)) return;
+    if (handleStudyCommand(text)) return;
     addUserMessage(text);
     const assistantId = startAssistantMessage();
     setStreaming(true);
@@ -164,12 +211,18 @@ export default function App() {
         },
         (event: AgentEvent) => {
           switch (event.type) {
+            case "thinking":
+              setOrbState("thinking");
+              appendThinking(assistantId, event.text);
+              break;
             case "token":
               setOrbState("speaking");
+              setThinkingDone(assistantId);
               appendToken(assistantId, event.text);
               break;
             case "tool_call": {
               setOrbState("tool");
+              setThinkingDone(assistantId);
               const toolId = `tool-${toolIdCounter++}-${event.name}`;
               addToolCall(assistantId, {
                 id: event.id || toolId,
@@ -197,6 +250,7 @@ export default function App() {
               break;
             case "final":
               finalText = event.text;
+              setThinkingDone(assistantId);
               if (event.stats) {
                 setRunInfo(assistantId, {
                   provider: event.stats.provider,
@@ -205,6 +259,7 @@ export default function App() {
                   toolCalls: event.stats.tool_calls,
                   elapsedSeconds: event.stats.elapsed_seconds,
                   providerSwitches: event.stats.provider_switches,
+                  tokensPerSecond: event.stats.tokens_per_second,
                 });
               }
               break;
@@ -251,10 +306,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <div className={`sidebar-scrim ${sidebarOpen ? "open" : ""}`} onClick={() => setSidebarOpen(false)} />
       <Sidebar
         modes={modes}
         personas={personas}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenPalette={() => setPaletteOpen(true)}
         onNewChat={() => {
           resetConversation();
           setSidebarOpen(false);
@@ -275,26 +332,75 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div style={{ position: "relative" }}>
-            <button
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10 }}>
+            <motion.button
+              className="composer-btn"
+              title="Quick actions (⌘K)"
+              onClick={() => setPaletteOpen(true)}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
+            >
+              <Command size={17} />
+            </motion.button>
+            <motion.button
               className="composer-btn artifacts-toggle-btn"
               title="Artifacts — files Meiko has generated this session"
               onClick={() => setArtifactsOpen((o) => !o)}
-              style={{ marginRight: 10 }}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
             >
               <FolderOpen size={18} />
-              {artifactCount > 0 && <span className="artifacts-badge">{artifactCount}</span>}
-            </button>
-            <button
+              <AnimatePresence>
+                {artifactCount > 0 && (
+                  <motion.span
+                    className="artifacts-badge"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                  >
+                    {artifactCount}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+            <motion.button
+              className="composer-btn"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              onClick={toggleTheme}
+              whileHover={{ scale: 1.08, rotate: 12 }}
+              whileTap={{ scale: 0.92 }}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={theme}
+                  initial={{ rotate: -90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 90, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ display: "flex" }}
+                >
+                  {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
+            <motion.button
               className="composer-btn"
               title={t("language")}
               onClick={() => setLangMenuOpen((o) => !o)}
-              style={{ marginRight: 10 }}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
             >
               <Globe size={18} />
-            </button>
+            </motion.button>
+            <AnimatePresence>
             {langMenuOpen && (
-              <div className="lang-menu">
+              <motion.div
+                className="lang-menu glass-strong"
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                transition={{ duration: 0.16 }}
+              >
                 {SUPPORTED_LANGUAGES.map((l) => (
                   <button
                     key={l.code}
@@ -308,8 +414,9 @@ export default function App() {
                     {l.label}
                   </button>
                 ))}
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
           <MeikoOrb state={orbState} size={44} />
         </div>
@@ -323,10 +430,16 @@ export default function App() {
                 <p>{t("heroSubtitle")}</p>
                 <div className="suggestion-row" ref={suggestRef}>
                   {SUGGESTIONS.map((s) => (
-                    <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>
+                    <motion.button
+                      key={s}
+                      className="suggestion-chip"
+                      onClick={() => sendMessage(s)}
+                      whileHover={{ y: -2, scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
                       <Sparkles size={12} style={{ marginRight: 6, display: "inline" }} />
                       {s}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </div>
@@ -339,8 +452,23 @@ export default function App() {
         <Composer onSend={sendMessage} onAttach={handleAttach} isStreaming={isStreaming} onStop={handleStop} />
       </main>
 
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-      {artifactsOpen && <ArtifactsPanel sessionId={sessionId} onClose={() => setArtifactsOpen(false)} />}
+      <AnimatePresence>{settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>{artifactsOpen && <ArtifactsPanel sessionId={sessionId} onClose={() => setArtifactsOpen(false)} />}</AnimatePresence>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        modes={modes}
+        theme={theme}
+        onNewChat={() => {
+          resetConversation();
+          setSidebarOpen(false);
+        }}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenArtifacts={() => setArtifactsOpen(true)}
+        onToggleTheme={toggleTheme}
+        onSetMode={setMode}
+        onRunPrompt={(text) => sendMessage(text)}
+      />
     </div>
   );
 }

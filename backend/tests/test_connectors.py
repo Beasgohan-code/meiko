@@ -18,9 +18,14 @@ def test_all_bundled_manifests_load_without_errors():
 
 def test_all_bundled_connectors_are_keyless_by_default():
     """Every bundled connector should work with zero configuration (no API
-    key required) so a brand-new install has useful tools immediately."""
+    key required) so a brand-new install has useful tools immediately --
+    except connectors that inherently act on a specific paid account (e.g.
+    Vercel), which unavoidably need the user's own personal access token."""
     manager = ConnectorManager()
+    ACCOUNT_SCOPED_EXCEPTIONS = {"vercel"}
     for manifest in manager.list_manifests():
+        if manifest.id in ACCOUNT_SCOPED_EXCEPTIONS:
+            continue
         assert manifest.auth.type == "none", f"{manifest.id} unexpectedly requires auth"
 
 

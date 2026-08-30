@@ -26,6 +26,7 @@ export interface RunInfo {
   toolCalls?: number;
   elapsedSeconds?: number;
   providerSwitches?: number;
+  tokensPerSecond?: number;
 }
 
 export interface ChatMessage {
@@ -39,6 +40,8 @@ export interface ChatMessage {
   citations?: Citation[];
   providerNotices?: string[];
   runInfo?: RunInfo;
+  thinking?: string;
+  isThinking?: boolean;
 }
 
 interface MeikoState {
@@ -51,6 +54,9 @@ interface MeikoState {
   model?: string;
   messages: ChatMessage[];
   isStreaming: boolean;
+  theme: "dark" | "light";
+  setTheme: (theme: "dark" | "light") => void;
+  toggleTheme: () => void;
   setMode: (mode: string) => void;
   setPersona: (personaId: string) => void;
   setProvider: (provider?: string, model?: string) => void;
@@ -59,6 +65,8 @@ interface MeikoState {
   addUserMessage: (content: string) => string;
   startAssistantMessage: () => string;
   appendToken: (id: string, text: string) => void;
+  appendThinking: (id: string, text: string) => void;
+  setThinkingDone: (id: string) => void;
   addToolCall: (assistantId: string, tool: ToolTrace) => void;
   updateToolResult: (assistantId: string, toolId: string, result: string) => void;
   finishAssistantMessage: (id: string, finalText?: string) => void;
@@ -86,6 +94,19 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
   model: undefined,
   messages: [],
   isStreaming: false,
+  theme: (localStorage.getItem("meiko_theme") as "dark" | "light") || "dark",
+
+  setTheme: (theme) => {
+    localStorage.setItem("meiko_theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
+    set({ theme });
+  },
+  toggleTheme: () => {
+    const next = get().theme === "dark" ? "light" : "dark";
+    localStorage.setItem("meiko_theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+    set({ theme: next });
+  },
 
   setMode: (mode) => set({ mode }),
   setPersona: (personaId) => set({ personaId }),
@@ -113,6 +134,18 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
   appendToken: (id, text) =>
     set((s) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + text } : m)),
+    })),
+
+  appendThinking: (id, text) =>
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === id ? { ...m, thinking: (m.thinking || "") + text, isThinking: true } : m
+      ),
+    })),
+
+  setThinkingDone: (id) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? { ...m, isThinking: false } : m)),
     })),
 
   addToolCall: (assistantId, tool) =>

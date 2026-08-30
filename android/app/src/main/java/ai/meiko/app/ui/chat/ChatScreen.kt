@@ -1,6 +1,7 @@
 package ai.meiko.app.ui.chat
 
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -29,7 +30,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,11 +88,24 @@ fun ChatScreen(viewModel: MeikoViewModel, onOpenSettings: () -> Unit, onOpenHist
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleTheme() }) {
+                        Icon(
+                            if (state.darkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            contentDescription = if (state.darkTheme) "Switch to light mode" else "Switch to dark mode",
+                            tint = MeikoColors.Text1,
+                        )
+                    }
                     IconButton(onClick = onOpenHistory) { Icon(Icons.Filled.History, contentDescription = "History", tint = MeikoColors.Text1) }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = MeikoColors.Text1) }
                     MeikoOrb(state = state.orbState, size = 34.dp, modifier = Modifier.padding(end = 8.dp))
                 },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MeikoColors.Bg1),
+                // Liquid-glass topbar: translucent tint + hairline border instead of a
+                // flat opaque surface, matching the web app's frosted-glass chrome.
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MeikoColors.Bg1.copy(alpha = 0.72f),
+                ),
+                modifier = Modifier
+                    .border(1.dp, MeikoColors.Border),
             )
         },
         bottomBar = {
@@ -97,25 +113,53 @@ fun ChatScreen(viewModel: MeikoViewModel, onOpenSettings: () -> Unit, onOpenHist
                 isStreaming = state.isStreaming,
                 onSend = { viewModel.sendMessage(it) },
                 onStop = { viewModel.stopStreaming() },
+                onAttach = { name, bytes, mime -> viewModel.uploadFile(name, bytes, mime) },
             )
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (state.messages.isEmpty()) {
-                HeroSection(onSuggestionTap = { viewModel.sendMessage(it) })
-            } else {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(state.messages, key = { it.id }) { msg ->
-                        MessageBubble(message = msg, downloadUrl = { viewModel.downloadUrl(it) })
+            androidx.compose.animation.AnimatedContent(
+                targetState = state.messages.isEmpty(),
+                label = "chat-body",
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(tween(260)) + androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = tween(260)))
+                        .togetherWith(androidx.compose.animation.fadeOut(tween(160)))
+                },
+            ) { empty ->
+                if (empty) {
+                    HeroSection(onSuggestionTap = { viewModel.sendMessage(it) })
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(state.messages, key = { it.id }) { msg ->
+                            AnimatedMessageEntrance {
+                                MessageBubble(message = msg, downloadUrl = { viewModel.downloadUrl(it) })
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Fade + slide-up entrance for each chat bubble (Groq/Claude/Arena-style
+ * animated message appearance), mirroring the web app's framer-motion
+ * message entrance transition. */
+@Composable
+private fun AnimatedMessageEntrance(content: @Composable () -> Unit) {
+    var visible by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.fadeIn(tween(320)) +
+            androidx.compose.animation.slideInVertically(tween(320)) { it / 6 },
+    ) {
+        content()
     }
 }
 

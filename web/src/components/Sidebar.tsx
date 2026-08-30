@@ -13,6 +13,7 @@ import {
   Trash2,
   Check,
   X,
+  Command,
 } from "lucide-react";
 import { animatePanelIn, animateStagger } from "../lib/animations";
 import type { AgentModeMeta, PersonaMeta } from "../lib/api";
@@ -47,10 +48,11 @@ interface SidebarProps {
   personas: PersonaMeta[];
   onOpenSettings: () => void;
   onNewChat: () => void;
+  onOpenPalette?: () => void;
   isOpen: boolean;
 }
 
-export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, isOpen }: SidebarProps) {
+export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, onOpenPalette, isOpen }: SidebarProps) {
   const { userId, conversationId, mode, setMode, personaId, setPersona, loadMessages } = useMeikoStore();
   const ref = useRef<HTMLDivElement>(null);
   const modeListRef = useRef<HTMLDivElement>(null);
@@ -150,6 +152,13 @@ export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, is
       <button className="new-chat-btn" onClick={onNewChat}>
         <Plus size={16} /> New chat
       </button>
+
+      {onOpenPalette && (
+        <button className="cmdk-trigger" onClick={onOpenPalette}>
+          <Command size={13} /> Quick actions
+          <span className="cmdk-kbd">⌘K</span>
+        </button>
+      )}
 
       <div>
         <div className="section-label">Agent Mode</div>

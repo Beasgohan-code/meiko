@@ -1,0 +1,107 @@
+{
+  "id": "vercel",
+  "name": "Vercel",
+  "description": "Manage and inspect Vercel projects/deployments — list projects, trigger and check deployments, read build/runtime logs, and manage environment variables. Requires a Vercel personal access token (Settings \u2192 Connectors \u2192 Vercel, or env var CONNECTOR_VERCEL_KEY).",
+  "base_url": "https://api.vercel.com",
+  "auth": { "type": "bearer", "header": "Authorization", "prefix": "Bearer " },
+  "enabled": true,
+  "actions": [
+    {
+      "name": "vercel_list_projects",
+      "description": "List Vercel projects in the account/team, with their latest production URL and framework.",
+      "method": "GET",
+      "path": "/v9/projects",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "default": 20, "description": "Max projects to return" },
+          "search": { "type": "string", "description": "Filter projects by name substring" }
+        },
+        "required": []
+      },
+      "query_params": ["limit", "search"]
+    },
+    {
+      "name": "vercel_list_deployments",
+      "description": "List recent deployments, optionally filtered to one project. Returns state (READY/ERROR/BUILDING), URL, and creation time.",
+      "method": "GET",
+      "path": "/v6/deployments",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "projectId": { "type": "string", "description": "Vercel project ID or name to filter by" },
+          "limit": { "type": "integer", "default": 10 },
+          "target": { "type": "string", "description": "production | preview" }
+        },
+        "required": []
+      },
+      "query_params": ["projectId", "limit", "target"]
+    },
+    {
+      "name": "vercel_get_deployment",
+      "description": "Get full details/status for a single deployment by its ID or URL.",
+      "method": "GET",
+      "path": "/v13/deployments/{idOrUrl}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "idOrUrl": { "type": "string", "description": "Deployment ID (dpl_...) or deployment URL" }
+        },
+        "required": ["idOrUrl"]
+      },
+      "path_params": ["idOrUrl"]
+    },
+    {
+      "name": "vercel_create_deployment",
+      "description": "Trigger a new deployment for a project from its connected Git repo (deploys the latest commit on the given branch/ref). Use this to redeploy after Meiko pushes code changes.",
+      "method": "POST",
+      "path": "/v13/deployments",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Project name" },
+          "gitSource": {
+            "type": "object",
+            "description": "e.g. {\"type\": \"github\", \"repo\": \"owner/repo\", \"ref\": \"main\"}"
+          },
+          "target": { "type": "string", "default": "production" }
+        },
+        "required": ["name"]
+      },
+      "body_params": ["name", "gitSource", "target"]
+    },
+    {
+      "name": "vercel_list_env_vars",
+      "description": "List (non-secret metadata for) environment variables configured on a project.",
+      "method": "GET",
+      "path": "/v10/projects/{idOrName}/env",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "idOrName": { "type": "string", "description": "Vercel project ID or name" }
+        },
+        "required": ["idOrName"]
+      },
+      "path_params": ["idOrName"]
+    },
+    {
+      "name": "vercel_set_env_var",
+      "description": "Create or update an environment variable on a project (e.g. to wire up a new API key after Vibe Coding deploys a generated app).",
+      "method": "POST",
+      "path": "/v10/projects/{idOrName}/env",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "idOrName": { "type": "string" },
+          "key": { "type": "string" },
+          "value": { "type": "string" },
+          "target": { "type": "array", "items": { "type": "string" }, "default": ["production", "preview", "development"] },
+          "type": { "type": "string", "default": "encrypted" }
+        },
+        "required": ["idOrName", "key", "value"]
+      },
+      "path_params": ["idOrName"],
+      "body_params": ["key", "value", "target", "type"]
+    }
+  ]
+}

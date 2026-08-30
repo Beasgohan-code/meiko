@@ -79,8 +79,13 @@ class GeminiProvider(LLMProvider):
                             continue
                         cand = candidates[0]
                         parts = cand.get("content", {}).get("parts", [])
-                        text = "".join(p.get("text", "") for p in parts)
+                        # Gemini 2.x "Thinking" models mark internal reasoning parts with
+                        # thought: true, distinct from the final answer parts.
+                        text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+                        reasoning = "".join(p.get("text", "") for p in parts if p.get("thought"))
                         finish = cand.get("finishReason")
+                        if reasoning:
+                            yield StreamChunk(reasoning_delta=reasoning, raw=obj)
                         if text:
                             yield StreamChunk(delta=text, raw=obj)
                         if finish:

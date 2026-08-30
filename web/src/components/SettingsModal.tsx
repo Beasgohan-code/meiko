@@ -1,5 +1,23 @@
 import { useEffect, useState } from "react";
-import { X, Github, Sparkles, Brain, Trash2, Copy, Check, Link2, Smartphone, Activity, BarChart3, Database, Puzzle, Cpu } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X,
+  Github,
+  Sparkles,
+  Brain,
+  Trash2,
+  Copy,
+  Check,
+  Link2,
+  Smartphone,
+  Activity,
+  BarChart3,
+  Database,
+  Puzzle,
+  Cpu,
+  SlidersHorizontal,
+  UserCircle2,
+} from "lucide-react";
 import {
   ConnectorMeta,
   MemoryFact,
@@ -207,43 +225,65 @@ export default function SettingsModal({ onClose }: Props) {
     }
   };
 
+  const TABS: { id: typeof tab; label: string; icon: React.ReactNode }[] = [
+    { id: "providers", label: "Model Providers", icon: <SlidersHorizontal size={15} /> },
+    { id: "connectors", label: "Connectors", icon: <Puzzle size={15} /> },
+    { id: "skills", label: t("skills"), icon: <Sparkles size={15} /> },
+    { id: "memory", label: t("memory"), icon: <Brain size={15} /> },
+    { id: "persona", label: t("persona"), icon: <UserCircle2 size={15} /> },
+    { id: "sync", label: t("sync"), icon: <Smartphone size={15} /> },
+    { id: "usage", label: "Usage", icon: <BarChart3 size={15} /> },
+    { id: "health", label: "Health", icon: <Activity size={15} /> },
+  ];
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+    <motion.div
+      className="modal-overlay"
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+    >
+      <motion.div
+        className="modal-panel settings-shell"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 18, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 14, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <nav className="settings-nav">
+          <div className="settings-nav-title">Settings</div>
+          {TABS.map((tb) => (
+            <button
+              key={tb.id}
+              className={`settings-nav-item ${tab === tb.id ? "active" : ""}`}
+              onClick={() => setTab(tb.id)}
+            >
+              {tb.icon}
+              <span>{tb.label}</span>
+              {tab === tb.id && <motion.span layoutId="settings-nav-glow" className="settings-nav-glow" />}
+            </button>
+          ))}
+        </nav>
+
+        <div className="settings-content">
         <div className="modal-header">
-          <h2>Settings</h2>
+          <h2>{TABS.find((tb) => tb.id === tab)?.label}</h2>
           <button className="close-btn" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
 
-        <div className="tab-row">
-          <button className={`tab-btn ${tab === "providers" ? "active" : ""}`} onClick={() => setTab("providers")}>
-            Model Providers
-          </button>
-          <button className={`tab-btn ${tab === "connectors" ? "active" : ""}`} onClick={() => setTab("connectors")}>
-            Connectors
-          </button>
-          <button className={`tab-btn ${tab === "skills" ? "active" : ""}`} onClick={() => setTab("skills")}>
-            {t("skills")}
-          </button>
-          <button className={`tab-btn ${tab === "memory" ? "active" : ""}`} onClick={() => setTab("memory")}>
-            {t("memory")}
-          </button>
-          <button className={`tab-btn ${tab === "persona" ? "active" : ""}`} onClick={() => setTab("persona")}>
-            {t("persona")}
-          </button>
-          <button className={`tab-btn ${tab === "sync" ? "active" : ""}`} onClick={() => setTab("sync")}>
-            {t("sync")}
-          </button>
-          <button className={`tab-btn ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>
-            <BarChart3 size={13} style={{ marginRight: 5, verticalAlign: -2 }} /> Usage
-          </button>
-          <button className={`tab-btn ${tab === "health" ? "active" : ""}`} onClick={() => setTab("health")}>
-            <Activity size={13} style={{ marginRight: 5, verticalAlign: -2 }} /> Health
-          </button>
-        </div>
-
+        <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -8 }}
+          transition={{ duration: 0.15 }}
+        >
         {tab === "providers" && (
           <div className="provider-card-list">
             <p className="field-hint" style={{ marginBottom: 4 }}>
@@ -366,17 +406,56 @@ export default function SettingsModal({ onClose }: Props) {
               </button>
             </div>
 
+            <div className="provider-card" style={{ marginBottom: 14 }}>
+              <div className="row">
+                <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  ▲ Vercel
+                </span>
+              </div>
+              <div className="desc">
+                Add a Vercel personal access token to let Meiko list your projects, check deployment status, trigger
+                redeploys, and manage environment variables — handy after Vibe Coding builds something you want to ship.
+              </div>
+              <input
+                type="password"
+                placeholder="Vercel personal access token"
+                defaultValue={keys.vercel || ""}
+                onChange={(e) => saveKey("vercel", e.target.value)}
+              />
+              <div className="field-hint">
+                <a href="https://vercel.com/account/tokens" target="_blank" rel="noreferrer">
+                  Create a token on Vercel →
+                </a>
+              </div>
+              <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 8 }} onClick={persistSettings}>
+                {saveStatus || "Save Vercel token"}
+              </button>
+            </div>
+
+            <AnimatePresence>
             {connectors.map((c) => (
-              <div className="connector-row" key={c.id}>
+              <motion.div
+                className="connector-row"
+                key={c.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+              >
                 <div className="meta">
                   <span className="name">{c.name}</span>
                   <span className="desc">{c.description}</span>
                 </div>
-                <button className={`toggle ${c.enabled ? "on" : ""}`} onClick={() => handleToggleConnector(c)}>
-                  <span className="knob" />
-                </button>
-              </div>
+                <motion.button
+                  className={`toggle ${c.enabled ? "on" : ""}`}
+                  onClick={() => handleToggleConnector(c)}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <motion.span className="knob" layout transition={{ type: "spring", stiffness: 500, damping: 32 }} />
+                </motion.button>
+              </motion.div>
             ))}
+            </AnimatePresence>
           </div>
         )}
 
@@ -665,7 +744,10 @@ export default function SettingsModal({ onClose }: Props) {
             )}
           </div>
         )}
-      </div>
-    </div>
+        </motion.div>
+        </AnimatePresence>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

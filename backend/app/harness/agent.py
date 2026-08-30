@@ -128,7 +128,7 @@ def build_default_registry(
 
 @dataclass
 class AgentEvent:
-    type: str  # "token" | "tool_call" | "tool_result" | "step" | "plan_update" | "citations" | "final" | "error" | "provider_switch"
+    type: str  # "token" | "thinking" | "tool_call" | "tool_result" | "step" | "plan_update" | "citations" | "final" | "error" | "provider_switch"
     data: dict[str, Any] = field(default_factory=dict)
 
     def to_sse(self) -> str:
@@ -141,9 +141,21 @@ class RunStats:
     tool_calls: int = 0
     provider_switches: int = 0
     started_at: float = field(default_factory=time.time)
+    answer_chars: int = 0  # characters of final-answer text streamed, for a Groq-style tokens/sec estimate
+    stream_started_at: Optional[float] = None  # set on first answer token of the winning attempt
 
     def elapsed(self) -> float:
         return round(time.time() - self.started_at, 2)
+
+    def tokens_per_second(self) -> Optional[float]:
+        """Rough tok/s estimate (~4 chars/token, the common English-text rule of thumb) for a
+        Groq-style speed readout. None until we have a meaningful sample."""
+        if not self.stream_started_at or self.answer_chars < 8:
+            return None
+        elapsed = time.time() - self.stream_started_at
+        if elapsed <= 0:
+            return None
+        return round((self.answer_chars / 4) / elapsed, 1)
 
 
 class MeikoAgent:
@@ -235,6 +247,7 @@ class MeikoAgent:
             yield AgentEvent(type="step", data={"step": step, "max_steps": max_steps})
 
             assistant_text = ""
+            reasoning_text = ""
             collected_tool_calls: list[dict[str, Any]] = []
             finish_reason = None
             last_error: Optional[str] = None
@@ -251,8 +264,18 @@ class MeikoAgent:
                         max_tokens=self.settings.MAX_TOKENS,
                         model=self.model if pid == self.provider_id else None,
                     ):
+                        if chunk.reasoning_delta:
+                            # DeepSeek-R1/QwQ/Gemini-Thinking-style chain-of-thought, streamed as
+                            # its own event so the UI can render it in a collapsible "Thinking"
+                            # panel (Claude Extended Thinking / DeepSeek-harness style) instead of
+                            # mixing it into the final answer.
+                            reasoning_text += chunk.reasoning_delta
+                            yield AgentEvent(type="thinking", data={"text": chunk.reasoning_delta})
                         if chunk.delta:
+                            if stats.stream_started_at is None:
+                                stats.stream_started_at = time.time()
                             assistant_text += chunk.delta
+                            stats.answer_chars += len(chunk.delta)
                             yield AgentEvent(type="token", data={"text": chunk.delta})
                         if chunk.tool_calls:
                             collected_tool_calls = chunk.tool_calls
@@ -269,6 +292,9 @@ class MeikoAgent:
                         next_pid = providers[active_idx][0]
                         yield AgentEvent(type="provider_switch", data={"from": pid, "to": next_pid, "reason": last_error[:200]})
                         assistant_text = ""  # discard partial output from failed provider
+                        reasoning_text = ""
+                        stats.answer_chars = 0
+                        stats.stream_started_at = None
                     continue
 
             if not succeeded:
@@ -330,6 +356,8 @@ class MeikoAgent:
                         "provider_switches": stats.provider_switches,
                         "provider": providers[active_idx][0],
                         "model": self.model if providers[active_idx][0] == self.provider_id else None,
+                        "tokens_per_second": stats.tokens_per_second(),
+                        "reasoning": bool(reasoning_text),
                     },
                 },
             )
@@ -349,6 +377,8 @@ class MeikoAgent:
                     "provider_switches": stats.provider_switches,
                     "provider": providers[active_idx][0] if active_idx < len(providers) else self.provider_id,
                     "model": self.model,
+                    "tokens_per_second": stats.tokens_per_second(),
+                    "reasoning": False,
                 },
             },
         )

@@ -20,6 +20,7 @@ class MeikoPrefs(private val context: Context) {
         val PERSONA_ID = stringPreferencesKey("persona_id")
         val UI_LANGUAGE = stringPreferencesKey("ui_language")
         val API_KEY = stringPreferencesKey("meiko_api_key")
+        val THEME = stringPreferencesKey("theme")
     }
 
     suspend fun backendUrl(default: String): String =
@@ -65,5 +66,11 @@ class MeikoPrefs(private val context: Context) {
     suspend fun apiKey(): String? = context.dataStore.data.first()[Keys.API_KEY]
     suspend fun setApiKey(v: String) {
         context.dataStore.edit { it[Keys.API_KEY] = v }
+    }
+
+    /** "dark" (default) or "light". */
+    suspend fun theme(): String = context.dataStore.data.first()[Keys.THEME] ?: "dark"
+    suspend fun setTheme(v: String) {
+        context.dataStore.edit { it[Keys.THEME] = v }
     }
 }
