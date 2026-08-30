@@ -17,6 +17,7 @@ import {
 import { animatePanelIn, animateStagger } from "../lib/animations";
 import type { AgentModeMeta, PersonaMeta } from "../lib/api";
 import {
+  connectSyncSocket,
   deleteConversation,
   getConversationMessages,
   listConversations,
@@ -86,6 +87,24 @@ export default function Sidebar({ modes, personas, onOpenSettings, onNewChat, is
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  // Live cross-device sync: another tab, the Android/Flutter app, or Telegram
+  // touching a conversation for this same account (see Settings → Sync)
+  // refreshes this list immediately instead of waiting for a manual reload.
+  useEffect(() => {
+    const conn = connectSyncSocket(userId, (msg) => {
+      if (
+        msg.event === "conversation_created" ||
+        msg.event === "conversation_updated" ||
+        msg.event === "conversation_deleted" ||
+        msg.event === "message_added"
+      ) {
+        refresh();
+      }
+    });
+    return () => conn.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const openConversation = async (id: string) => {
     try {

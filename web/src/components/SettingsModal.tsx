@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
-import { X, Github, Sparkles, Brain, Trash2 } from "lucide-react";
+import { X, Github, Sparkles, Brain, Trash2, Copy, Check, Link2, Smartphone } from "lucide-react";
 import {
   ConnectorMeta,
   MemoryFact,
   ModelMeta,
   ProviderMeta,
   SkillMeta,
+  claimPairingCode,
   clearMemories,
+  connectSyncSocket,
+  createPairingCode,
   deleteMemory,
   fetchConnectors,
   fetchMemories,
   fetchModels,
   fetchProviders,
   fetchSkills,
+  getSyncStatus,
   getUserSettings,
   toggleConnector,
   updateUserSettings,
@@ -33,9 +37,9 @@ const MODEL_TAG_LABEL: Record<string, string> = {
 };
 
 export default function SettingsModal({ onClose }: Props) {
-  const { userId, provider, model, setProvider } = useMeikoStore();
+  const { userId, provider, model, setProvider, setUserId } = useMeikoStore();
   const { t } = useI18n();
-  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "memory" | "persona">("providers");
+  const [tab, setTab] = useState<"providers" | "connectors" | "skills" | "memory" | "persona" | "sync">("providers");
   const [providers, setProviders] = useState<ProviderMeta[]>([]);
   const [models, setModels] = useState<ModelMeta[]>([]);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
@@ -48,6 +52,12 @@ export default function SettingsModal({ onClose }: Props) {
   const [customPersona, setCustomPersona] = useState("");
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [githubStatus, setGithubStatus] = useState<string>("");
+  const [pairingCode, setPairingCode] = useState<string>("");
+  const [pairingExpiresAt, setPairingExpiresAt] = useState<number | null>(null);
+  const [claimInput, setClaimInput] = useState("");
+  const [syncStatus, setSyncStatus] = useState<string>("");
+  const [connectedDevices, setConnectedDevices] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchProviders().then(setProviders);
@@ -60,11 +70,33 @@ export default function SettingsModal({ onClose }: Props) {
       if (s.persona) setCustomPersona(s.persona);
       if (s.ui_language) setReplyLanguage(s.ui_language);
     });
+    getSyncStatus(userId).then((s) => setConnectedDevices(s.connected_devices)).catch(() => {});
   }, [userId]);
 
   useEffect(() => {
     fetchModels(activeProvider).then(setModels);
   }, [activeProvider]);
+
+  // Live sync: reflect settings/memory changes made from another linked
+  // device (or the pairing count changing) while this modal is open.
+  useEffect(() => {
+    const conn = connectSyncSocket(userId, (msg) => {
+      if (msg.event === "settings_updated") {
+        getUserSettings(userId).then((s) => {
+          if (s.provider) setActiveProvider(s.provider);
+          if (s.model) setActiveModel(s.model);
+          if (s.persona) setCustomPersona(s.persona);
+          if (s.ui_language) setReplyLanguage(s.ui_language);
+        });
+      } else if (msg.event === "memory_updated") {
+        fetchMemories(userId).then(setMemories).catch(() => {});
+      }
+      // Any live event means at least one other device is connected —
+      // refresh the "N devices online" hint opportunistically.
+      getSyncStatus(userId).then((s) => setConnectedDevices(s.connected_devices)).catch(() => {});
+    });
+    return () => conn.close();
+  }, [userId]);
 
   const handleDeleteMemory = async (id: string) => {
     await deleteMemory(id);
@@ -110,6 +142,42 @@ export default function SettingsModal({ onClose }: Props) {
     setConnectors((prev) => prev.map((x) => (x.id === c.id ? { ...x, enabled: !x.enabled } : x)));
   };
 
+  const handleCreatePairingCode = async () => {
+    setSyncStatus("");
+    try {
+      const res = await createPairingCode(userId);
+      setPairingCode(res.code);
+      setPairingExpiresAt(Date.now() + res.expires_in * 1000);
+    } catch {
+      setSyncStatus("Could not create a pairing code — is the backend reachable?");
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (!pairingCode) return;
+    try {
+      await navigator.clipboard.writeText(pairingCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard permission denied — user can still select+copy manually */
+    }
+  };
+
+  const handleClaimCode = async () => {
+    setSyncStatus("Linking…");
+    try {
+      const res = await claimPairingCode(claimInput.trim());
+      setUserId(res.user_id);
+      setSyncStatus("Linked! This device now shares conversations, settings, and memory with the other one. 🎉");
+      setClaimInput("");
+      const status = await getSyncStatus(res.user_id);
+      setConnectedDevices(status.connected_devices);
+    } catch (e: any) {
+      setSyncStatus(e?.message || "That code is invalid or has expired.");
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -135,6 +203,9 @@ export default function SettingsModal({ onClose }: Props) {
           </button>
           <button className={`tab-btn ${tab === "persona" ? "active" : ""}`} onClick={() => setTab("persona")}>
             {t("persona")}
+          </button>
+          <button className={`tab-btn ${tab === "sync" ? "active" : ""}`} onClick={() => setTab("sync")}>
+            {t("sync")}
           </button>
         </div>
 
@@ -335,6 +406,94 @@ export default function SettingsModal({ onClose }: Props) {
             <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 12 }} onClick={persistSettings}>
               {saveStatus || "Save persona"}
             </button>
+          </div>
+        )}
+
+        {tab === "sync" && (
+          <div className="field-group">
+            <p className="field-hint" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+              <Smartphone size={14} />
+              Every device (web, Android, iOS, Telegram) shares one account keyed by a device ID — link them to
+              share conversations, settings, and memory instantly, live, no password needed.
+            </p>
+
+            <div className="provider-card" style={{ marginTop: 10 }}>
+              <div className="row">
+                <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Link2 size={14} /> This device
+                </span>
+                <span className="field-hint">
+                  {connectedDevices > 0 ? `${connectedDevices} other device(s) online` : "No other devices linked yet"}
+                </span>
+              </div>
+              <div className="desc" style={{ wordBreak: "break-all", fontFamily: "monospace", fontSize: 12 }}>
+                {userId}
+              </div>
+              <div className="field-hint" style={{ marginTop: 4 }}>
+                Generate a code below and type it into your other device (or scan/paste it into the mobile app's
+                Sync tab) to make it use this same account.
+              </div>
+              <button className="new-chat-btn" style={{ justifyContent: "center", marginTop: 10 }} onClick={handleCreatePairingCode}>
+                Generate pairing code
+              </button>
+              {pairingCode && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4, fontFamily: "monospace" }}>
+                    {pairingCode}
+                  </span>
+                  <button className="icon-btn" title="Copy code" onClick={handleCopyCode}>
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </div>
+              )}
+              {pairingCode && pairingExpiresAt && (
+                <div className="field-hint" style={{ textAlign: "center", marginTop: 4 }}>
+                  Expires in 10 minutes — enter it on the other device now.
+                </div>
+              )}
+            </div>
+
+            <div className="provider-card" style={{ marginTop: 10 }}>
+              <div className="row">
+                <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Smartphone size={14} /> Link this device to another one
+                </span>
+              </div>
+              <div className="desc">Got a code from another device? Type it in here to adopt its account.</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="ABC123"
+                  value={claimInput}
+                  onChange={(e) => setClaimInput(e.target.value.toUpperCase())}
+                  style={{
+                    flex: 1,
+                    fontFamily: "monospace",
+                    letterSpacing: 3,
+                    fontSize: 16,
+                    textAlign: "center",
+                    textTransform: "uppercase",
+                  }}
+                />
+                <button className="new-chat-btn" onClick={handleClaimCode} disabled={claimInput.trim().length < 4}>
+                  Link
+                </button>
+              </div>
+              {syncStatus && (
+                <div className="field-hint" style={{ marginTop: 8 }}>
+                  {syncStatus}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

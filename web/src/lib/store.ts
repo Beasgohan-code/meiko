@@ -45,6 +45,7 @@ interface MeikoState {
   setPersona: (personaId: string) => void;
   setProvider: (provider?: string, model?: string) => void;
   setConversationId: (id?: string) => void;
+  setUserId: (id: string) => void;
   addUserMessage: (content: string) => string;
   startAssistantMessage: () => string;
   appendToken: (id: string, text: string) => void;
@@ -79,6 +80,10 @@ export const useMeikoStore = create<MeikoState>((set, get) => ({
   setPersona: (personaId) => set({ personaId }),
   setProvider: (provider, model) => set({ provider, model }),
   setConversationId: (id) => set({ conversationId: id }),
+  setUserId: (id) => {
+    localStorage.setItem("meiko_user_id", id);
+    set({ userId: id, conversationId: undefined, messages: [] });
+  },
 
   addUserMessage: (content) => {
     const id = uuidv4();

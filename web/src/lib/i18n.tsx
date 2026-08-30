@@ -63,6 +63,7 @@ const en: Dict = {
   personaPlaceholder: "e.g. Always answer in Malayalam and English side by side. Be extra concise.",
   replyLanguage: "Reply language",
   replyLanguageHelp: "Meiko will reply in this language regardless of interface language.",
+  sync: "Sync",
 };
 
 const es: Dict = {
@@ -106,6 +107,7 @@ const es: Dict = {
   personaPlaceholder: "p.ej. Responde siempre en español conciso.",
   replyLanguage: "Idioma de respuesta",
   replyLanguageHelp: "Meiko responderá en este idioma sin importar el idioma de la interfaz.",
+  sync: "Sincronizar",
 };
 
 const hi: Dict = {
@@ -149,6 +151,7 @@ const hi: Dict = {
   personaPlaceholder: "जैसे, हमेशा हिंदी और अंग्रेज़ी दोनों में संक्षेप में उत्तर दें।",
   replyLanguage: "उत्तर की भाषा",
   replyLanguageHelp: "इंटरफ़ेस भाषा चाहे जो भी हो, मेइको इसी भाषा में जवाब देगा।",
+  sync: "समन्वय",
 };
 
 const fr: Dict = {
@@ -192,6 +195,7 @@ const fr: Dict = {
   personaPlaceholder: "ex. Répondez toujours en français, de façon concise.",
   replyLanguage: "Langue de réponse",
   replyLanguageHelp: "Meiko répondra dans cette langue quelle que soit la langue de l'interface.",
+  sync: "Synchro",
 };
 
 const zh: Dict = {
@@ -234,6 +238,7 @@ const zh: Dict = {
   personaPlaceholder: "例如：始终用简洁的中文回答。",
   replyLanguage: "回复语言",
   replyLanguageHelp: "无论界面语言是什么，Meiko 都会用此语言回复。",
+  sync: "同步",
 };
 
 const DICTS: Record<string, Dict> = { en, es, hi, fr, zh };

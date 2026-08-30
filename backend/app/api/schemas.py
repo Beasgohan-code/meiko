@@ -50,3 +50,11 @@ class ConnectorToggleRequest(BaseModel):
 class ConnectorSecretRequest(BaseModel):
     user_id: str = Field(default="default", max_length=128)
     secret: str
+
+
+class PairingCreateRequest(BaseModel):
+    user_id: str = Field(default="default", max_length=128)
+
+
+class PairingClaimRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=12)

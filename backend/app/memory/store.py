@@ -300,6 +300,13 @@ class Store:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
+    async def get_memory(self, memory_id: str) -> Optional[dict[str, Any]]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM memories WHERE id = ?", (memory_id,))
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
     async def delete_memory(self, memory_id: str) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))

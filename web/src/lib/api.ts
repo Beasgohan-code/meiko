@@ -161,6 +161,101 @@ export async function getUserSettings(userId: string) {
   return res.json();
 }
 
+// ---------------- Cross-device sync ----------------
+// Every client already shares the backend's data model via `user_id`; these
+// helpers make it possible for a human to move that `user_id` between
+// devices with a short 6-character code instead of copy-pasting a UUID, and
+// to react live when another device changes something.
+export interface PairingCode {
+  code: string;
+  expires_in: number;
+}
+
+export async function createPairingCode(userId: string): Promise<PairingCode> {
+  const res = await fetch(`${BASE_URL}/api/sync/pair`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers() },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) throw new Error("Could not create a pairing code.");
+  return res.json();
+}
+
+export async function claimPairingCode(code: string): Promise<{ user_id: string }> {
+  const res = await fetch(`${BASE_URL}/api/sync/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers() },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) throw new Error("That code is invalid or has expired. Codes last 10 minutes.");
+  return res.json();
+}
+
+export async function getSyncStatus(userId: string): Promise<{ connected_devices: number }> {
+  const res = await fetch(`${BASE_URL}/api/sync/status?user_id=${encodeURIComponent(userId)}`);
+  return res.json();
+}
+
+export type SyncEventType = "message_added" | "settings_updated" | "memory_updated" | "conversation_updated" | "conversation_created" | "conversation_deleted";
+
+export interface SyncMessage {
+  event: SyncEventType;
+  data: Record<string, any>;
+  ts: number;
+}
+
+/**
+ * Opens a live WebSocket to /ws/sync/{userId} and calls `onMessage` for every
+ * push from the backend (fired whenever *any* device sharing this user_id
+ * changes a conversation/setting/memory). Auto-reconnects with backoff so a
+ * flaky connection (mobile network, laptop sleep) doesn't permanently kill
+ * live sync — call the returned `close()` to tear it down (e.g. on unmount).
+ */
+export function connectSyncSocket(userId: string, onMessage: (msg: SyncMessage) => void): { close: () => void } {
+  let socket: WebSocket | null = null;
+  let closed = false;
+  let retryDelay = 1000;
+
+  const wsBase = (BASE_URL || window.location.origin).replace(/^http/, "ws");
+
+  function connect() {
+    if (closed) return;
+    try {
+      socket = new WebSocket(`${wsBase}/ws/sync/${encodeURIComponent(userId)}`);
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    socket.onopen = () => {
+      retryDelay = 1000;
+    };
+    socket.onmessage = (ev) => {
+      try {
+        onMessage(JSON.parse(ev.data));
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+    socket.onclose = scheduleReconnect;
+    socket.onerror = () => socket?.close();
+  }
+
+  function scheduleReconnect() {
+    if (closed) return;
+    setTimeout(connect, retryDelay);
+    retryDelay = Math.min(retryDelay * 1.7, 20000);
+  }
+
+  connect();
+
+  return {
+    close: () => {
+      closed = true;
+      socket?.close();
+    },
+  };
+}
+
 export async function updateUserSettings(payload: {
   user_id: string;
   provider?: string;

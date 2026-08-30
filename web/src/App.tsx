@@ -5,7 +5,7 @@ import Sidebar from "./components/Sidebar";
 import MessageBubble from "./components/MessageBubble";
 import Composer from "./components/Composer";
 import SettingsModal from "./components/SettingsModal";
-import { AgentEvent, AgentModeMeta, PersonaMeta, fetchModes, fetchPersonas, streamChat, uploadFile } from "./lib/api";
+import { AgentEvent, AgentModeMeta, PersonaMeta, connectSyncSocket, fetchModes, fetchPersonas, getConversationMessages, streamChat, uploadFile } from "./lib/api";
 import { useMeikoStore } from "./lib/store";
 import { animateHeroText, animateStagger } from "./lib/animations";
 import { useI18n, SUPPORTED_LANGUAGES } from "./lib/i18n";
@@ -41,6 +41,7 @@ export default function App() {
     updatePlan,
     setCitations,
     addProviderNotice,
+    loadMessages,
   } = useMeikoStore();
 
   const [modes, setModes] = useState<AgentModeMeta[]>([]);
@@ -59,6 +60,19 @@ export default function App() {
     fetchModes().then(setModes);
     fetchPersonas().then(setPersonas);
   }, []);
+
+  // Live cross-device sync: if another device (mobile app, another tab,
+  // Telegram) adds a message to the conversation currently open here, pull
+  // the latest messages so this window updates without a manual refresh.
+  useEffect(() => {
+    const conn = connectSyncSocket(userId, (msg) => {
+      if (msg.event === "message_added" && conversationId && msg.data?.conversation_id === conversationId && !isStreaming) {
+        getConversationMessages(conversationId).then((rows) => loadMessages(conversationId, rows));
+      }
+    });
+    return () => conn.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, conversationId, isStreaming]);
 
   useEffect(() => {
     if (messages.length === 0 && heroRef.current) {

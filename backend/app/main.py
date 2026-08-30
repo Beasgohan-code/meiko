@@ -12,6 +12,10 @@ Exposes:
   - POST /api/upload       -> upload an image/document into a session workspace
   - GET  /api/download/{session_id}/{filename} -> download generated files/zip
   - GET  /api/usage        -> per-user usage analytics summary
+  - POST /api/sync/pair, POST /api/sync/claim, GET /api/sync/status,
+    WS   /ws/sync/{user_id} -> cross-device pairing codes + live push so the
+    web app, native Android app, Flutter app, Telegram bot, and CLI can all
+    share one account and see each other's changes in real time
   - GET  /health, GET /health/ready
 
 Cross-cutting concerns (structured logging, optional API-key auth, rate
@@ -27,7 +31,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +41,8 @@ from .api.schemas import (
     ConnectorManifestRequest,
     ConnectorToggleRequest,
     NewConversationRequest,
+    PairingClaimRequest,
+    PairingCreateRequest,
     RenameConversationRequest,
     SettingsUpdateRequest,
 )
@@ -46,6 +52,7 @@ from .core.modes import list_modes
 from .core.personas import get_persona, list_personas
 from .tools.skills import discover_skills
 from .core.security import enforce_chat_rate_limit, enforce_general_rate_limit, require_api_key
+from .core.sync import get_pairing_registry, get_sync_hub
 from .harness.agent import AgentEvent, MeikoAgent
 from .memory.store import get_store
 from .plugins.manager import get_connector_manager
@@ -178,7 +185,53 @@ async def update_settings_route(payload: SettingsUpdateRequest):
         payload.user_id, provider=payload.provider, model=payload.model,
         api_keys=payload.api_keys, persona=payload.persona, ui_language=payload.ui_language,
     )
+    await get_sync_hub().publish(payload.user_id, "settings_updated")
     return {"ok": True}
+
+
+# ---------------- Cross-device sync (pairing + live push) ----------------
+@app.post("/api/sync/pair", dependencies=[Depends(require_api_key)])
+async def create_pairing_code(payload: PairingCreateRequest):
+    """Device A calls this to mint a short-lived 6-character code that another
+    device can type in to adopt the same `user_id` — the simplest possible
+    account-free way to make two installs share conversations/settings/memory."""
+    return get_pairing_registry().create(payload.user_id)
+
+
+@app.post("/api/sync/claim", dependencies=[Depends(require_api_key)])
+async def claim_pairing_code(payload: PairingClaimRequest):
+    user_id = get_pairing_registry().claim(payload.code)
+    if not user_id:
+        raise HTTPException(status_code=404, detail="Code not found or expired. Codes are valid for 10 minutes.")
+    return {"user_id": user_id}
+
+
+@app.get("/api/sync/status", dependencies=[Depends(require_api_key)])
+async def sync_status(user_id: str = Query("default")):
+    """How many other live connections (other tabs/devices) are currently
+    subscribed for this user_id — lets the UI show an 'N devices online' hint."""
+    return {"connected_devices": get_sync_hub().device_count(user_id)}
+
+
+@app.websocket("/ws/sync/{user_id}")
+async def sync_websocket(websocket: WebSocket, user_id: str):
+    """Live push channel: every other device sharing this `user_id` gets a small
+    JSON nudge — {"event": "message_added"|"settings_updated"|"memory_updated"|
+    "conversation_updated", "data": {...}} — whenever something changes, so
+    open apps can refetch just that slice of state instead of polling."""
+    hub = get_sync_hub()
+    await hub.connect(user_id, websocket)
+    try:
+        while True:
+            # We don't expect client -> server traffic on this channel, but
+            # draining it keeps the socket alive and lets us detect disconnects.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        await hub.disconnect(user_id, websocket)
 
 
 # ---------------- Conversations ----------------
@@ -223,27 +276,33 @@ async def get_conversation_messages(conversation_id: str):
 @app.patch("/api/conversations/{conversation_id}", dependencies=[Depends(require_api_key)])
 async def rename_conversation(conversation_id: str, payload: RenameConversationRequest):
     store = get_store()
-    if not await store.get_conversation(conversation_id):
+    conv = await store.get_conversation(conversation_id)
+    if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     await store.rename_conversation(conversation_id, payload.title)
+    await get_sync_hub().publish(conv["user_id"], "conversation_updated", {"conversation_id": conversation_id})
     return {"ok": True}
 
 
 @app.delete("/api/conversations/{conversation_id}", dependencies=[Depends(require_api_key)])
 async def delete_conversation(conversation_id: str):
     store = get_store()
-    if not await store.get_conversation(conversation_id):
+    conv = await store.get_conversation(conversation_id)
+    if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     await store.delete_conversation(conversation_id)
+    await get_sync_hub().publish(conv["user_id"], "conversation_deleted", {"conversation_id": conversation_id})
     return {"ok": True}
 
 
 @app.post("/api/conversations/{conversation_id}/pin", dependencies=[Depends(require_api_key)])
 async def pin_conversation(conversation_id: str, pinned: bool = Query(True)):
     store = get_store()
-    if not await store.get_conversation(conversation_id):
+    conv = await store.get_conversation(conversation_id)
+    if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
     await store.set_pinned(conversation_id, pinned)
+    await get_sync_hub().publish(conv["user_id"], "conversation_updated", {"conversation_id": conversation_id})
     return {"ok": True}
 
 
@@ -264,7 +323,10 @@ async def get_memories(user_id: str = Query("default")):
 @app.delete("/api/memories/{memory_id}", dependencies=[Depends(require_api_key)])
 async def delete_memory(memory_id: str):
     store = get_store()
+    memory = await store.get_memory(memory_id)
     await store.delete_memory(memory_id)
+    if memory:
+        await get_sync_hub().publish(memory["user_id"], "memory_updated")
     return {"ok": True}
 
 
@@ -272,6 +334,7 @@ async def delete_memory(memory_id: str):
 async def clear_memories(user_id: str = Query("default")):
     store = get_store()
     await store.clear_memories(user_id)
+    await get_sync_hub().publish(user_id, "memory_updated")
     return {"ok": True}
 
 
@@ -383,6 +446,7 @@ async def chat_stream(payload: ChatRequest):
             history.append(ChatMessage(role=row["role"], content=row["content"]))
 
     await store.add_message(conversation_id, "user", payload.message)
+    await get_sync_hub().publish(payload.user_id, "message_added", {"conversation_id": conversation_id, "role": "user"})
 
     image_urls = payload.image_paths or None
 
@@ -405,6 +469,10 @@ async def chat_stream(payload: ChatRequest):
         try:
             if is_new_conversation:
                 yield AgentEvent(type="conversation_created", data={"conversation_id": conversation_id, "title": derive_title(payload.message)}).to_sse()
+                await get_sync_hub().publish(
+                    payload.user_id, "conversation_created",
+                    {"conversation_id": conversation_id, "title": derive_title(payload.message)},
+                )
             async for event in agent.run(session_id, payload.user_id, history, payload.message, image_urls=image_urls):
                 if event.type == "final":
                     final_text = event.data.get("text", "")
@@ -420,6 +488,10 @@ async def chat_stream(payload: ChatRequest):
             if final_text:
                 await store.add_message(conversation_id, "assistant", final_text)
                 await store.touch_conversation(conversation_id)
+                await get_sync_hub().publish(
+                    payload.user_id, "message_added",
+                    {"conversation_id": conversation_id, "role": "assistant"},
+                )
             try:
                 await store.log_usage(
                     payload.user_id, provider_id, payload.mode,
