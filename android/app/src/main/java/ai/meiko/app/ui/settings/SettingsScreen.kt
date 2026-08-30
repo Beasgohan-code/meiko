@@ -16,8 +16,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material3.Button
@@ -37,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -132,7 +135,7 @@ fun SettingsScreen(viewModel: MeikoViewModel, onBack: () -> Unit) {
                         onDelete = { viewModel.deleteMemory(it) },
                         onClearAll = { viewModel.clearAllMemories() },
                     )
-                    4 -> SkillsTab(skills = state.skills)
+                    4 -> SkillsTab(skills = state.skills, viewModel = viewModel)
                     5 -> AccountTab(
                         username = state.authUsername,
                         avatarUrl = state.authAvatarUrl,
@@ -425,27 +428,147 @@ private fun AccountTab(
 }
 
 @Composable
-private fun SkillsTab(skills: List<ai.meiko.app.data.SkillMeta>) {
+private fun SkillsTab(skills: List<ai.meiko.app.data.SkillMeta>, viewModel: MeikoViewModel) {
+    var editorFor by remember { mutableStateOf<String?>(null) }
+    var showEditor by remember { mutableStateOf(false) }
+
     Column {
         Text("Skills", fontWeight = FontWeight.Bold, color = MeikoColors.Text0, fontSize = 14.sp)
         Spacer(Modifier.height(4.dp))
         Text("Reusable playbooks Meiko can invoke automatically when your message matches a trigger.", fontSize = 12.sp, color = MeikoColors.Text2)
         Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = { editorFor = null; showEditor = true },
+            colors = ButtonDefaults.buttonColors(containerColor = MeikoColors.Violet),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.height(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Add a skill")
+        }
+        Spacer(Modifier.height(10.dp))
         if (skills.isEmpty()) {
             Text("No skills installed.", color = MeikoColors.Text2, fontSize = 12.sp)
         }
         skills.forEach { s ->
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(MeikoColors.Panel)
                     .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(s.name, color = MeikoColors.Text0, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                if (s.description.isNotBlank()) Text(s.description, color = MeikoColors.Text2, fontSize = 11.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(s.name, color = MeikoColors.Text0, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    if (s.description.isNotBlank()) Text(s.description, color = MeikoColors.Text2, fontSize = 11.sp)
+                }
+                IconButton(onClick = { editorFor = s.id; showEditor = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit skill", tint = MeikoColors.Text2, modifier = Modifier.height(16.dp))
+                }
+                IconButton(onClick = { viewModel.deleteSkill(s.id) }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete skill", tint = MeikoColors.Text2, modifier = Modifier.height(16.dp))
+                }
             }
         }
     }
+
+    if (showEditor) {
+        SkillEditorDialog(
+            skillId = editorFor,
+            viewModel = viewModel,
+            onDismiss = { showEditor = false },
+        )
+    }
+}
+
+@Composable
+private fun SkillEditorDialog(skillId: String?, viewModel: MeikoViewModel, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var triggers by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(skillId != null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(skillId) {
+        if (skillId != null) {
+            runCatching { viewModel.fetchSkillDetail(skillId) }.onSuccess { s ->
+                name = s.name
+                description = s.description
+                triggers = s.triggers.joinToString(", ")
+                body = s.body
+            }
+            loading = false
+        }
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MeikoColors.Bg1,
+        title = { Text(if (skillId == null) "Add a skill" else "Edit skill", color = MeikoColors.Text0) },
+        text = {
+            if (loading) {
+                Text("Loading…", color = MeikoColors.Text2)
+            } else {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = triggers,
+                        onValueChange = { triggers = it },
+                        label = { Text("Trigger keywords (comma-separated)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = body,
+                        onValueChange = { body = it },
+                        label = { Text("Instructions (Markdown)") },
+                        minLines = 6,
+                        maxLines = 12,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (error != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(error!!, color = androidx.compose.ui.graphics.Color(0xFFFF6B6B), fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && !loading,
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        val triggerList = triggers.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        val err = viewModel.saveSkill(name, description, triggerList, body, skillId)
+                        saving = false
+                        if (err == null) onDismiss() else error = err
+                    }
+                },
+            ) { Text(if (saving) "Saving…" else "Save", color = MeikoColors.Violet) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = MeikoColors.Text2) }
+        },
+    )
 }

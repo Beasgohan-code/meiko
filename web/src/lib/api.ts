@@ -175,6 +175,52 @@ export async function fetchSkills(): Promise<SkillMeta[]> {
   return res.json();
 }
 
+export interface SkillDetail extends SkillMeta {
+  body: string;
+}
+
+export async function fetchSkillDetail(skillId: string): Promise<SkillDetail> {
+  const res = await fetch(`${BASE_URL}/api/skills/${encodeURIComponent(skillId)}`);
+  if (!res.ok) throw new Error("Skill not found");
+  return res.json();
+}
+
+export interface SkillDraft {
+  name: string;
+  description: string;
+  triggers: string[];
+  body: string;
+  skill_id?: string;
+}
+
+export async function createSkill(draft: SkillDraft, apiKey?: string): Promise<SkillDetail> {
+  const res = await fetch(`${BASE_URL}/api/skills`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify(draft),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || "Failed to create skill");
+  return res.json();
+}
+
+export async function updateSkill(skillId: string, draft: SkillDraft, apiKey?: string): Promise<SkillDetail> {
+  const res = await fetch(`${BASE_URL}/api/skills/${encodeURIComponent(skillId)}`, {
+    method: "PUT",
+    headers: headers(apiKey),
+    body: JSON.stringify(draft),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || "Failed to update skill");
+  return res.json();
+}
+
+export async function deleteSkill(skillId: string, apiKey?: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/skills/${encodeURIComponent(skillId)}`, {
+    method: "DELETE",
+    headers: headers(apiKey),
+  });
+  if (!res.ok) throw new Error("Failed to delete skill");
+}
+
 export async function fetchConnectors(): Promise<ConnectorMeta[]> {
   const res = await fetch(`${BASE_URL}/api/connectors`);
   return res.json();

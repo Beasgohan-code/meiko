@@ -49,12 +49,13 @@ from .api.schemas import (
     PairingCreateRequest,
     RenameConversationRequest,
     SettingsUpdateRequest,
+    SkillCreateRequest,
 )
 from .core.config import get_settings
 from .core.logging import get_logger, new_request_id, request_id_ctx, setup_logging
 from .core.modes import list_modes
 from .core.personas import get_persona, list_personas
-from .tools.skills import discover_skills
+from .tools.skills import SkillValidationError, delete_skill, discover_skills, get_skill, save_skill
 from .core.security import (
     enforce_chat_rate_limit,
     enforce_general_rate_limit,
@@ -335,6 +336,53 @@ async def get_skill_detail(skill_id: str):
         if s.id == skill_id:
             return {"id": s.id, "name": s.name, "description": s.description, "triggers": s.triggers, "body": s.body}
     raise HTTPException(status_code=404, detail=f"No skill named '{skill_id}'")
+
+
+@app.post("/api/skills", dependencies=[Depends(require_api_key)])
+async def create_skill(payload: SkillCreateRequest):
+    """Lets the web/Android 'add a skill' UI write a real SKILL.md on disk
+    (same format the built-in skills ship in) without touching a
+    filesystem directly — the agent's list_skills/use_skill tools pick it
+    up immediately on the next request, no restart needed."""
+    try:
+        skill = save_skill(
+            name=payload.name,
+            description=payload.description,
+            triggers=payload.triggers,
+            body=payload.body,
+            skill_id=payload.skill_id,
+        )
+    except SkillValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"id": skill.id, "name": skill.name, "description": skill.description, "triggers": skill.triggers, "body": skill.body}
+
+
+@app.put("/api/skills/{skill_id}", dependencies=[Depends(require_api_key)])
+async def update_skill(skill_id: str, payload: SkillCreateRequest):
+    if get_skill(skill_id) is None:
+        raise HTTPException(status_code=404, detail=f"No skill named '{skill_id}'")
+    try:
+        skill = save_skill(
+            name=payload.name,
+            description=payload.description,
+            triggers=payload.triggers,
+            body=payload.body,
+            skill_id=skill_id,
+        )
+    except SkillValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"id": skill.id, "name": skill.name, "description": skill.description, "triggers": skill.triggers, "body": skill.body}
+
+
+@app.delete("/api/skills/{skill_id}", dependencies=[Depends(require_api_key)])
+async def delete_skill_route(skill_id: str):
+    try:
+        deleted = delete_skill(skill_id)
+    except SkillValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No skill named '{skill_id}'")
+    return {"status": "deleted", "id": skill_id}
 
 
 # ---------------- Settings ----------------

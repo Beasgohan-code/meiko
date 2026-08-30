@@ -58,6 +58,24 @@ data class SkillMeta(
 )
 
 @Serializable
+data class SkillDetail(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val triggers: List<String> = emptyList(),
+    val body: String = "",
+)
+
+@Serializable
+data class SkillDraft(
+    val name: String,
+    val description: String = "",
+    val triggers: List<String> = emptyList(),
+    val body: String,
+    val skill_id: String? = null,
+)
+
+@Serializable
 data class MemoryFact(val id: String, val fact: String, @SerialName("created_at") val createdAt: Double = 0.0)
 
 @Serializable

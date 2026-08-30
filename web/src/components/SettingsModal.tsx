@@ -17,6 +17,8 @@ import {
   Cpu,
   SlidersHorizontal,
   UserCircle2,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import {
   ConnectorMeta,
@@ -29,19 +31,24 @@ import {
   clearMemories,
   connectSyncSocket,
   createPairingCode,
+  createSkill,
   deleteMemory,
+  deleteSkill,
   fetchConnectors,
   fetchMemories,
   fetchModels,
   fetchProviders,
+  fetchSkillDetail,
   fetchSkills,
   fetchSystemStatus,
   getSyncStatus,
   getUsageSummary,
   getUserSettings,
   toggleConnector,
+  updateSkill,
   updateUserSettings,
 } from "../lib/api";
+import SkillEditorModal from "./SkillEditorModal";
 import { useMeikoStore } from "../lib/store";
 import { useI18n, SUPPORTED_LANGUAGES } from "../lib/i18n";
 
@@ -67,6 +74,9 @@ export default function SettingsModal({ onClose }: Props) {
   const [models, setModels] = useState<ModelMeta[]>([]);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [skills, setSkills] = useState<SkillMeta[]>([]);
+  const [skillEditorOpen, setSkillEditorOpen] = useState(false);
+  const [editingSkillId, setEditingSkillId] = useState<string | undefined>(undefined);
+  const refreshSkills = () => fetchSkills().then(setSkills);
   const [memories, setMemories] = useState<MemoryFact[]>([]);
   const [memorySearch, setMemorySearch] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
@@ -465,12 +475,48 @@ export default function SettingsModal({ onClose }: Props) {
               Skills are reusable playbooks Meiko can load on demand for specialized tasks — like Claude's Agent
               Skills. Meiko decides when to use one automatically; you don't need to toggle anything.
             </p>
+            <motion.button
+              className="new-chat-btn"
+              style={{ marginBottom: 12 }}
+              onClick={() => {
+                setEditingSkillId(undefined);
+                setSkillEditorOpen(true);
+              }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <Plus size={15} style={{ marginRight: 6 }} /> Add a skill
+            </motion.button>
             {skills.map((s) => (
               <div className="provider-card" key={s.id}>
                 <div className="row">
                   <span className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <Sparkles size={14} /> {s.name}
                   </span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      className="icon-btn"
+                      title="Edit skill"
+                      onClick={() => {
+                        setEditingSkillId(s.id);
+                        setSkillEditorOpen(true);
+                      }}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      title="Delete skill"
+                      onClick={async () => {
+                        if (window.confirm(`Delete skill "${s.name}"? This can't be undone.`)) {
+                          await deleteSkill(s.id);
+                          refreshSkills();
+                        }
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div className="desc">{s.description}</div>
                 {s.triggers?.length > 0 && (
@@ -748,6 +794,18 @@ export default function SettingsModal({ onClose }: Props) {
         </AnimatePresence>
         </div>
       </motion.div>
+      <AnimatePresence>
+        {skillEditorOpen && (
+          <SkillEditorModal
+            skillId={editingSkillId}
+            onClose={() => setSkillEditorOpen(false)}
+            onSaved={() => {
+              setSkillEditorOpen(false);
+              refreshSkills();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

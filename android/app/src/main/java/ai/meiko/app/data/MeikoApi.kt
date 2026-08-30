@@ -12,6 +12,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.preparePost
@@ -79,6 +80,27 @@ class MeikoApi(private var baseUrl: String, private var apiKey: String? = null) 
     suspend fun fetchModels(provider: String): List<ModelMeta> =
         client.get("$baseUrl/api/models") { parameter("provider", provider) }.body()
     suspend fun fetchSkills(): List<SkillMeta> = client.get("$baseUrl/api/skills").body()
+
+    suspend fun fetchSkillDetail(skillId: String): SkillDetail =
+        client.get("$baseUrl/api/skills/$skillId").body()
+
+    suspend fun createSkill(draft: SkillDraft): SkillDetail =
+        client.post("$baseUrl/api/skills") {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(draft)
+        }.body()
+
+    suspend fun updateSkill(skillId: String, draft: SkillDraft): SkillDetail =
+        client.put("$baseUrl/api/skills/$skillId") {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(draft)
+        }.body()
+
+    suspend fun deleteSkill(skillId: String) {
+        client.delete("$baseUrl/api/skills/$skillId") { withAuth() }
+    }
 
     suspend fun fetchConnectors(): List<ConnectorMeta> =
         client.get("$baseUrl/api/connectors") { withAuth() }.body()

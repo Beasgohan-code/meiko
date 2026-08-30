@@ -52,6 +52,14 @@ class ConnectorSecretRequest(BaseModel):
     secret: str
 
 
+class SkillCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    triggers: list[str] = Field(default_factory=list)
+    body: str = Field(..., min_length=1, max_length=50000)
+    skill_id: Optional[str] = Field(default=None, max_length=100)
+
+
 class PairingCreateRequest(BaseModel):
     user_id: str = Field(default="default", max_length=128)
 

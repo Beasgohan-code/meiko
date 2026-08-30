@@ -243,6 +243,40 @@ class MeikoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun refreshSkills() {
+        viewModelScope.launch {
+            runCatching { api.fetchSkills() }.onSuccess { _state.value = _state.value.copy(skills = it) }
+        }
+    }
+
+    suspend fun fetchSkillDetail(skillId: String) = api.fetchSkillDetail(skillId)
+
+    /** Returns an error message on failure, or null on success — lets the
+     * "Add a skill" dialog show why saving failed (e.g. empty body). */
+    suspend fun saveSkill(
+        name: String,
+        description: String,
+        triggers: List<String>,
+        body: String,
+        existingSkillId: String?,
+    ): String? {
+        val draft = ai.meiko.app.data.SkillDraft(name, description, triggers, body, existingSkillId)
+        return try {
+            if (existingSkillId != null) api.updateSkill(existingSkillId, draft) else api.createSkill(draft)
+            refreshSkills()
+            null
+        } catch (e: Exception) {
+            e.message ?: "Failed to save skill"
+        }
+    }
+
+    fun deleteSkill(skillId: String) {
+        viewModelScope.launch {
+            runCatching { api.deleteSkill(skillId) }
+            refreshSkills()
+        }
+    }
+
     fun newConversation() {
         sessionId = UUID.randomUUID().toString()
         _state.value = _state.value.copy(messages = emptyList(), conversationId = null)

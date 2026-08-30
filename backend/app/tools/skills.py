@@ -91,6 +91,72 @@ def get_skill(skill_id: str) -> Optional[Skill]:
     return None
 
 
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(name: str) -> str:
+    slug = _SLUG_RE.sub("-", name.strip().lower()).strip("-")
+    return slug or "skill"
+
+
+class SkillValidationError(ValueError):
+    pass
+
+
+def render_skill_md(name: str, description: str, triggers: list[str], body: str) -> str:
+    """Build a SKILL.md file's exact on-disk text from structured fields —
+    the inverse of `Skill.load`'s frontmatter parser."""
+    triggers_line = "[" + ", ".join(t.strip() for t in triggers if t.strip()) + "]"
+    frontmatter = f"---\nname: {name}\ndescription: {description}\ntriggers: {triggers_line}\n---\n\n"
+    return frontmatter + body.strip() + "\n"
+
+
+def save_skill(
+    name: str,
+    description: str,
+    triggers: list[str],
+    body: str,
+    skill_id: Optional[str] = None,
+) -> Skill:
+    """Create a new user-authored skill, or overwrite an existing one when
+    `skill_id` is given (used for editing). Lets the 'add a skill' UI in
+    the web/Android apps write a real SKILL.md without the user touching
+    the filesystem — same format the built-in skills ship in, so the
+    agent's `list_skills`/`use_skill` tools pick it up identically."""
+    if not name.strip():
+        raise SkillValidationError("Skill name is required")
+    if not body.strip():
+        raise SkillValidationError("Skill instructions (body) cannot be empty")
+
+    resolved_id = skill_id or slugify(name)
+    if not re.fullmatch(r"[a-z0-9-]+", resolved_id):
+        raise SkillValidationError("Skill id may only contain lowercase letters, numbers, and hyphens")
+
+    skill_dir = (SKILLS_DIR / resolved_id).resolve()
+    if SKILLS_DIR.resolve() not in skill_dir.parents and skill_dir != SKILLS_DIR.resolve():
+        raise SkillValidationError("Invalid skill id")
+
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    content = render_skill_md(name, description, triggers, body)
+    (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+    return Skill(id=resolved_id, name=name, description=description, triggers=triggers, body=body.strip())
+
+
+def delete_skill(skill_id: str) -> bool:
+    """Remove a user-authored skill folder. Returns False if it didn't exist."""
+    if not re.fullmatch(r"[a-z0-9-]+", skill_id):
+        raise SkillValidationError("Invalid skill id")
+    skill_dir = (SKILLS_DIR / skill_id).resolve()
+    if SKILLS_DIR.resolve() not in skill_dir.parents:
+        raise SkillValidationError("Invalid skill id")
+    if not skill_dir.exists():
+        return False
+    import shutil
+
+    shutil.rmtree(skill_dir)
+    return True
+
+
 class SkillsListTool(Tool):
     name = "list_skills"
     description = (
